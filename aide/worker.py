@@ -2,6 +2,7 @@ import asyncio
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 from .models import Message
 from .taskbox import Taskbox
@@ -49,8 +50,10 @@ async def run_worker(
     taskbox: Taskbox,
     timeout: int = 120,
     worker_cmd: str = "auto",
-    mode: str = "git",
+    mode: Literal["git", "bare"] = "git",
 ) -> None:
+    if mode not in ("git", "bare"):
+        raise ValueError(f"Unknown mode {mode!r}. Expected 'git' or 'bare'.")
     cmd = worker_cmd if worker_cmd != "auto" else detect_worker_cmd()
     if cmd is None:
         taskbox.send_message(
