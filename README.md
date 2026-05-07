@@ -12,21 +12,37 @@ Requires Python 3.11+.
 
 ## Authentication
 
-AIDE supports two auth modes, configured in `.aide/config.json`:
+AIDE supports multiple LLM providers for task planning, each with two auth modes.
 
-**Option 1 — Anthropic API key (default if key is set):**
+### Providers
+
+| Provider | `provider` value | API key env var | Subscription (CLI) |
+|----------|-----------------|-----------------|-------------------|
+| Anthropic (Claude) | `anthropic` | `ANTHROPIC_API_KEY` | ✓ `claude` CLI |
+| OpenAI (ChatGPT) | `openai` | `OPENAI_API_KEY` | ✗ |
+| Google (Gemini) | `google` | `GEMINI_API_KEY` | ✓ `gemini` CLI |
+| Perplexity | `perplexity` | `PERPLEXITY_API_KEY` | ✗ |
+
+### Auth modes
+
+- **`auto` (default)** — uses API key if env var is set, otherwise falls back to subscription CLI
+- **`api_key`** — always use SDK with API key (error if not set)
+- **`subscription`** — always use the provider's CLI (Anthropic and Google only)
+
+Configure in `.aide/config.json` or set during `aide init`.
+
+### Optional provider installs
+
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+pip install 'aide[openai]'   # OpenAI support
+pip install 'aide[google]'   # Google Gemini support
+pip install 'aide[all]'      # All providers
 ```
 
-**Option 2 — Claude subscription (no API key needed):**
-Requires the `claude` CLI to be installed and authenticated (`claude` is Claude Code).
-```bash
-# In .aide/config.json:
-{ "auth_mode": "claude_cli" }
-```
+### Worker CLI (code execution)
 
-**Auto mode (default):** Uses API key if `ANTHROPIC_API_KEY` is set, otherwise falls back to the `claude` CLI.
+Workers auto-detect the best available agentic CLI: `claude` → `codex` → `gemini`.
+Override with `"worker_cmd": "claude"` in `.aide/config.json`.
 
 ## Quick start
 
@@ -113,25 +129,29 @@ Removes all finished worktrees.
 
 ```json
 {
+  "provider": "anthropic",
+  "model": "claude-opus-4-7",
+  "auth_mode": "auto",
+  "api_key_env": "ANTHROPIC_API_KEY",
+  "worker_cmd": "auto",
   "verify_command": null,
   "default_agent_count": null,
   "worker_timeout_seconds": 120,
-  "anthropic_model": "claude-opus-4-7",
-  "max_concurrent_workers": 20,
-  "auth_mode": "auto",
-  "claude_cmd": "claude"
+  "max_concurrent_workers": 20
 }
 ```
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `verify_command` | `null` | Run before merging each agent branch. Auto-detected if null (`pytest`, `npm test`, `make test`). |
+| `provider` | `"anthropic"` | LLM provider for planning: `anthropic`, `openai`, `google`, `perplexity` |
+| `model` | `"claude-opus-4-7"` | Model name for the chosen provider |
+| `auth_mode` | `"auto"` | `"auto"` \| `"api_key"` \| `"subscription"` |
+| `api_key_env` | `"ANTHROPIC_API_KEY"` | Env var name holding the API key |
+| `worker_cmd` | `"auto"` | CLI for agent execution: `"auto"` auto-detects `claude`/`codex`/`gemini` |
+| `verify_command` | `null` | Run before merging each branch. Auto-detected if null (`pytest`, `npm test`, `make test`). |
 | `default_agent_count` | `null` | Override auto-computed count for all runs. |
 | `worker_timeout_seconds` | `120` | Kill agent after this many seconds of inactivity. |
-| `anthropic_model` | `claude-opus-4-7` | Model used for task decomposition (API key mode only). |
 | `max_concurrent_workers` | `20` | Max agents running simultaneously. |
-| `auth_mode` | `"auto"` | `"auto"` \| `"api_key"` \| `"claude_cli"` |
-| `claude_cmd` | `"claude"` | Path to the `claude` CLI binary. |
 
 ## How it works
 
