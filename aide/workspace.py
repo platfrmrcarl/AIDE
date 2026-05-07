@@ -18,13 +18,15 @@ def init_aide(repo_path: Path) -> Path:
         config_path.write_text(
             json.dumps(
                 {
+                    "provider": "anthropic",
+                    "model": "claude-opus-4-7",
+                    "auth_mode": "auto",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                    "worker_cmd": "auto",
                     "verify_command": None,
                     "default_agent_count": None,
                     "worker_timeout_seconds": 120,
-                    "anthropic_model": "claude-opus-4-7",
                     "max_concurrent_workers": 20,
-                    "auth_mode": "auto",
-                    "claude_cmd": "claude",
                 },
                 indent=2,
             )

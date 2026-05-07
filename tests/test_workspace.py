@@ -77,3 +77,16 @@ def test_detect_verify_command_npm(git_repo):
 
 def test_detect_verify_command_none(git_repo):
     assert detect_verify_command(git_repo) is None
+
+
+def test_init_aide_config_has_provider_fields(git_repo):
+    """New config schema includes provider, model, auth_mode, api_key_env, worker_cmd."""
+    init_aide(git_repo)
+    config = get_config(git_repo)
+    assert config["provider"] == "anthropic"
+    assert config["model"] == "claude-opus-4-7"
+    assert config["auth_mode"] == "auto"
+    assert config["api_key_env"] == "ANTHROPIC_API_KEY"
+    assert config["worker_cmd"] == "auto"
+    assert "anthropic_model" not in config
+    assert "claude_cmd" not in config
