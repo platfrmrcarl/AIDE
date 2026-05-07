@@ -1,5 +1,6 @@
 import asyncio
 import json
+import shutil
 from pathlib import Path
 
 import click
@@ -8,7 +9,13 @@ from .manager import run_manager
 from .planner import plan_task
 from .providers import SUPPORTED_PROVIDERS, detect_worker_cmd
 from .taskbox import Taskbox
-from .workspace import get_config, init_aide, is_initialized, list_worktrees, delete_worktree
+from .workspace import (
+    BareWorkspace,
+    get_config,
+    init_aide,
+    is_initialized,
+    workspace_factory,
+)
 
 
 @click.group()
@@ -21,7 +28,7 @@ def main():
 @click.option("--no-interactive", is_flag=True, default=False,
               help="Skip prompts and use defaults.")
 def init(repo_path, no_interactive):
-    """Initialize AIDE for a git repository."""
+    """Initialize AIDE in a directory (git repo not required)."""
     path = Path(repo_path).resolve()
     if is_initialized(path):
         click.echo(f"AIDE already initialized at {path}")
@@ -40,13 +47,22 @@ def init(repo_path, no_interactive):
     )
     meta = SUPPORTED_PROVIDERS[provider]
     model = click.prompt("Model", default=meta["default_model"])
-    auth_choices = ["auto", "api_key", "subscription"] if meta["supports_subscription"] else ["auto", "api_key"]
+    auth_choices = (
+        ["auto", "api_key", "subscription"]
+        if meta["supports_subscription"]
+        else ["auto", "api_key"]
+    )
     auth_mode = click.prompt(
         "Auth mode",
         type=click.Choice(auth_choices),
         default="auto",
     )
     api_key_env = click.prompt("API key env var", default=meta["api_key_env"])
+    mode = click.prompt(
+        "Workspace mode",
+        type=click.Choice(["auto", "git", "bare"]),
+        default="auto",
+    )
 
     detected_cli = detect_worker_cmd()
     if detected_cli:
@@ -59,6 +75,7 @@ def init(repo_path, no_interactive):
     config_path = path / ".aide" / "config.json"
     existing = json.loads(config_path.read_text())
     existing.update({
+        "mode": mode,
         "provider": provider,
         "model": model,
         "auth_mode": auth_mode,
@@ -75,7 +92,9 @@ def init(repo_path, no_interactive):
 @click.option("--repo", default=".", type=click.Path())
 @click.option("--agents", type=int, default=None)
 @click.option("--verify", "verify_cmd", default=None)
-def run(prompt, task_file, repo, agents, verify_cmd):
+@click.option("--output", "output_dir", default=None, type=click.Path(),
+              help="Output directory for bare mode agent results.")
+def run(prompt, task_file, repo, agents, verify_cmd, output_dir):
     """Run agents on a task prompt or .md file."""
     if prompt and task_file:
         click.echo("Error: provide either a prompt or --file, not both.")
@@ -87,8 +106,7 @@ def run(prompt, task_file, repo, agents, verify_cmd):
     repo_path = Path(repo).resolve()
 
     if not is_initialized(repo_path):
-        click.echo(f"Error: AIDE is not initialized at {repo_path}. Run 'aide init' first.", err=True)
-        raise SystemExit(1)
+        init_aide(repo_path)
 
     if task_file:
         prompt = Path(task_file).read_text()
@@ -115,6 +133,8 @@ def run(prompt, task_file, repo, agents, verify_cmd):
             verify_cmd=verify_cmd or config.get("verify_command"),
             worker_cmd=config.get("worker_cmd", "auto"),
             worker_timeout=config.get("worker_timeout_seconds", 120),
+            mode=config.get("mode", "auto"),
+            output_dir=Path(output_dir) if output_dir else None,
         )
     )
 
@@ -122,6 +142,8 @@ def run(prompt, task_file, repo, agents, verify_cmd):
         f"Run {result['run_id']}: {result['status']} "
         f"({result['completed']}/{result['total']} tasks)"
     )
+    for path in result.get("output_paths", []):
+        click.echo(f"  → {path}")
 
 
 @main.command()
@@ -154,14 +176,19 @@ def status(repo, run_id):
 
 @main.command()
 @click.option("--repo", default=".", type=click.Path())
-@click.option("--all", "all_worktrees", is_flag=True, default=False)
-def clean(repo, all_worktrees):
-    """Remove finished worktrees."""
+@click.option("--all", "all_slots", is_flag=True, default=False)
+def clean(repo, all_slots):
+    """Remove finished agent workspaces."""
     repo_path = Path(repo).resolve()
-    worktrees = list_worktrees(repo_path)
+    config = get_config(repo_path) if is_initialized(repo_path) else {}
+    ws = workspace_factory(config, repo_path)
+    slots = ws.list_slots()
     count = 0
-    for wt in worktrees:
-        wt_path = Path(wt["path"])
-        delete_worktree(repo_path, wt_path)
+    for slot in slots:
+        slot_path = Path(slot["path"])
+        if isinstance(ws, BareWorkspace):
+            shutil.rmtree(slot_path, ignore_errors=True)
+        else:
+            ws.cleanup_slot(slot_path, slot.get("branch", slot.get("slot_id", "")))
         count += 1
     click.echo(f"Removed {count} worktrees.")

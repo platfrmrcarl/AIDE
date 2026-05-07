@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -100,20 +100,21 @@ def test_status_shows_run(runner, git_repo):
 
 
 def test_clean_removes_worktrees(runner, git_repo, mocker):
-    """aide clean calls delete_worktree for each listed worktree"""
+    """aide clean calls cleanup_slot for each listed slot (git mode)."""
     init_aide(git_repo)
 
-    fake_worktrees = [
+    from aide.workspace import GitWorkspace
+    mock_ws = MagicMock(spec=GitWorkspace)
+    mock_ws.mode = "git"
+    mock_ws.list_slots.return_value = [
         {"path": "/tmp/wt1", "branch": "aide/r1/agent-1"},
         {"path": "/tmp/wt2", "branch": "aide/r1/agent-2"},
     ]
-
-    mocker.patch("aide.cli.list_worktrees", return_value=fake_worktrees)
-    mock_delete = mocker.patch("aide.cli.delete_worktree")
+    mocker.patch("aide.cli.workspace_factory", return_value=mock_ws)
 
     result = runner.invoke(main, ["clean", "--repo", str(git_repo)])
     assert result.exit_code == 0
-    assert mock_delete.call_count == 2
+    assert mock_ws.cleanup_slot.call_count == 2
     assert "Removed 2 worktrees" in result.output
 
 
@@ -154,3 +155,75 @@ def test_run_passes_provider_to_plan_task(runner, git_repo, mocker):
     assert result.exit_code == 0, result.output
     call_kwargs = mock_plan.call_args
     assert call_kwargs.kwargs.get("provider") == "openai" or (len(call_kwargs.args) > 1 and call_kwargs.args[1] == "openai")
+
+
+def test_run_auto_inits_if_not_initialized(runner, tmp_path, mocker):
+    """aide run auto-inits if .aide/ doesn't exist."""
+    from aide.models import Plan, SubTask
+    fake_plan = Plan(
+        run_id="r1", original_prompt="do a thing",
+        agent_count=1, complexity_score=5,
+        tasks=[SubTask(id="t1", description="do a thing", depends_on=[])],
+    )
+    mocker.patch("aide.cli.plan_task", return_value=fake_plan)
+    mocker.patch("aide.cli.run_manager", new=AsyncMock(return_value={
+        "run_id": "r1", "status": "complete", "completed": 1, "failed": 0, "total": 1,
+    }))
+
+    result = runner.invoke(main, ["run", "do a thing", "--repo", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".aide").exists()
+
+
+def test_run_bare_prints_output_paths(runner, git_repo, mocker):
+    """aide run prints → path for each output_path in result."""
+    init_aide(git_repo)
+    from aide.models import Plan, SubTask
+    fake_plan = Plan(
+        run_id="r1", original_prompt="name my biz",
+        agent_count=1, complexity_score=5,
+        tasks=[SubTask(id="t1", description="name my biz", depends_on=[])],
+    )
+    mocker.patch("aide.cli.plan_task", return_value=fake_plan)
+    mocker.patch("aide.cli.run_manager", new=AsyncMock(return_value={
+        "run_id": "r1", "status": "complete", "completed": 1, "failed": 0, "total": 1,
+        "output_paths": ["/tmp/fake/output/agent-abc"],
+    }))
+
+    result = runner.invoke(main, ["run", "name my biz", "--repo", str(git_repo)])
+    assert result.exit_code == 0, result.output
+    assert "/tmp/fake/output/agent-abc" in result.output
+
+
+def test_init_no_interactive_writes_mode_auto(runner, git_repo):
+    """aide init --no-interactive writes mode: auto to config."""
+    import json
+    result = runner.invoke(main, ["init", str(git_repo), "--no-interactive"])
+    assert result.exit_code == 0
+    config = json.loads((git_repo / ".aide" / "config.json").read_text())
+    assert config["mode"] == "auto"
+
+
+def test_clean_bare_mode_removes_slot_dirs(runner, tmp_path, mocker):
+    """aide clean in bare mode calls shutil.rmtree on slot dirs."""
+    init_aide(tmp_path)
+    import json
+    config_path = tmp_path / ".aide" / "config.json"
+    config = json.loads(config_path.read_text())
+    config["mode"] = "bare"
+    config_path.write_text(json.dumps(config))
+
+    from aide.workspace import BareWorkspace
+    mock_ws = MagicMock(spec=BareWorkspace)
+    mock_ws.mode = "bare"
+    mock_ws.list_slots.return_value = [
+        {"path": str(tmp_path / "slot1"), "slot_id": "slot1"},
+        {"path": str(tmp_path / "slot2"), "slot_id": "slot2"},
+    ]
+    mocker.patch("aide.cli.workspace_factory", return_value=mock_ws)
+    mock_rmtree = mocker.patch("aide.cli.shutil.rmtree")
+
+    result = runner.invoke(main, ["clean", "--repo", str(tmp_path)])
+    assert result.exit_code == 0
+    assert mock_rmtree.call_count == 2
+    assert "Removed 2" in result.output
