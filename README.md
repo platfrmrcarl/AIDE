@@ -251,7 +251,6 @@ Removes finished agent worktrees.
 
 ```bash
 aide clean                  # remove all finished worktrees
-aide clean --all            # remove all worktrees (including in-progress)
 aide clean --repo /path     # different repo
 ```
 

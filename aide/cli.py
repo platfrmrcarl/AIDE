@@ -176,8 +176,7 @@ def status(repo, run_id):
 
 @main.command()
 @click.option("--repo", default=".", type=click.Path())
-@click.option("--all", "all_slots", is_flag=True, default=False)
-def clean(repo, all_slots):
+def clean(repo):
     """Remove finished agent workspaces."""
     repo_path = Path(repo).resolve()
     config = get_config(repo_path) if is_initialized(repo_path) else {}
