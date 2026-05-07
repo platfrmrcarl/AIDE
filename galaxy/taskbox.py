@@ -173,6 +173,19 @@ class Taskbox:
                 (status, datetime.utcnow().isoformat(), pid, agent_id),
             )
 
+    def list_runs(self) -> list[RunRecord]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+        return [
+            RunRecord(
+                id=row["id"], prompt=row["prompt"], agent_count=row["agent_count"],
+                complexity_score=row["complexity_score"], status=row["status"],
+                started_at=datetime.fromisoformat(row["started_at"]),
+                completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
+            )
+            for row in rows
+        ]
+
     def get_agents(self, run_id: str) -> list[AgentRecord]:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM agents WHERE run_id=?", (run_id,)).fetchall()
