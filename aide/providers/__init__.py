@@ -52,6 +52,8 @@ def resolve_auth_mode(
     supports_subscription: bool,
     provider_name: str,
 ) -> str:
+    if auth_mode not in ("api_key", "subscription", "auto"):
+        raise ValueError(f"Invalid auth_mode '{auth_mode}'. Must be: api_key, subscription, auto")
     if auth_mode == "subscription":
         if not supports_subscription:
             raise ValueError(
