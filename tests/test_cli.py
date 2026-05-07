@@ -12,7 +12,7 @@ from aide.workspace import init_aide
 
 def test_init_creates_aide_dir(runner, git_repo):
     """aide init creates .aide/ directory"""
-    result = runner.invoke(main, ["init", str(git_repo)])
+    result = runner.invoke(main, ["init", str(git_repo), "--no-interactive"])
     assert result.exit_code == 0
     assert (git_repo / ".aide").exists()
     assert "initialized" in result.output
@@ -115,3 +115,42 @@ def test_clean_removes_worktrees(runner, git_repo, mocker):
     assert result.exit_code == 0
     assert mock_delete.call_count == 2
     assert "Removed 2 worktrees" in result.output
+
+
+def test_init_no_interactive_uses_defaults(runner, git_repo):
+    """aide init --no-interactive writes default config without prompting."""
+    result = runner.invoke(main, ["init", str(git_repo), "--no-interactive"])
+    assert result.exit_code == 0
+    config_path = git_repo / ".aide" / "config.json"
+    assert config_path.exists()
+    import json
+    config = json.loads(config_path.read_text())
+    assert config["provider"] == "anthropic"
+    assert config["auth_mode"] == "auto"
+
+
+def test_run_passes_provider_to_plan_task(runner, git_repo, mocker):
+    """aide run passes provider/model/auth_mode from config to plan_task."""
+    init_aide(git_repo)
+    import json
+    config_path = git_repo / ".aide" / "config.json"
+    config = json.loads(config_path.read_text())
+    config["provider"] = "openai"
+    config["model"] = "gpt-4o"
+    config_path.write_text(json.dumps(config))
+
+    from aide.models import Plan, SubTask
+    fake_plan = Plan(
+        run_id="r1", original_prompt="do a thing",
+        agent_count=1, complexity_score=5,
+        tasks=[SubTask(id="t1", description="do a thing", depends_on=[])],
+    )
+    mock_plan = mocker.patch("aide.cli.plan_task", return_value=fake_plan)
+    mocker.patch("aide.cli.run_manager", new=AsyncMock(return_value={
+        "run_id": "r1", "status": "complete", "completed": 1, "failed": 0, "total": 1,
+    }))
+
+    result = runner.invoke(main, ["run", "do a thing", "--repo", str(git_repo)])
+    assert result.exit_code == 0, result.output
+    call_kwargs = mock_plan.call_args
+    assert call_kwargs.kwargs.get("provider") == "openai" or (len(call_kwargs.args) > 1 and call_kwargs.args[1] == "openai")

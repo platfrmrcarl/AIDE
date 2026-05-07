@@ -16,7 +16,7 @@ async def run_manager(
     taskbox: Taskbox,
     max_concurrent: int = 20,
     verify_cmd: str | None = None,
-    claude_cmd: str = "claude",
+    worker_cmd: str = "auto",
     worker_timeout: int = 120,
 ) -> dict:
     taskbox.save_run(
@@ -62,7 +62,7 @@ async def run_manager(
                 agent_id=agent_id, run_id=plan.run_id,
                 task_id=subtask.id, task_description=subtask.description,
                 worktree_path=worktree_path, taskbox=taskbox,
-                timeout=worker_timeout, claude_cmd=claude_cmd,
+                timeout=worker_timeout, worker_cmd=worker_cmd,
             )
 
     while len(completed) + len(failed) < len(all_ids):

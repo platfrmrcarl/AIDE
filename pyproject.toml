@@ -5,18 +5,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aide"
-version = "0.1.0"
+version = "0.2.0"
 description = "CAID multi-agent AI orchestrator using git worktrees"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.40.0",
     "click>=8.0",
+    "httpx>=0.27",
 ]
 
 [project.scripts]
 aide = "aide.cli:main"
 
 [project.optional-dependencies]
+openai = ["openai>=1.0"]
+google = ["google-generativeai>=0.8"]
+all = ["openai>=1.0", "google-generativeai>=0.8"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",

@@ -1,18 +1,14 @@
 import asyncio
+import json
 from pathlib import Path
 
 import click
 
 from .manager import run_manager
 from .planner import plan_task
+from .providers import SUPPORTED_PROVIDERS, detect_worker_cmd
 from .taskbox import Taskbox
-from .workspace import (
-    delete_worktree,
-    get_config,
-    init_aide,
-    is_initialized,
-    list_worktrees,
-)
+from .workspace import get_config, init_aide, is_initialized, list_worktrees, delete_worktree
 
 
 @click.group()
@@ -22,13 +18,54 @@ def main():
 
 @main.command()
 @click.argument("repo_path", default=".", type=click.Path())
-def init(repo_path):
+@click.option("--no-interactive", is_flag=True, default=False,
+              help="Skip prompts and use defaults.")
+def init(repo_path, no_interactive):
     """Initialize AIDE for a git repository."""
     path = Path(repo_path).resolve()
     if is_initialized(path):
         click.echo(f"AIDE already initialized at {path}")
         return
+
+    if no_interactive:
+        init_aide(path)
+        click.echo(f"AIDE initialized at {path}")
+        return
+
+    # Interactive setup
+    provider = click.prompt(
+        "Provider",
+        type=click.Choice(list(SUPPORTED_PROVIDERS.keys())),
+        default="anthropic",
+    )
+    meta = SUPPORTED_PROVIDERS[provider]
+    model = click.prompt("Model", default=meta["default_model"])
+    auth_choices = ["auto", "api_key", "subscription"] if meta["supports_subscription"] else ["auto", "api_key"]
+    auth_mode = click.prompt(
+        "Auth mode",
+        type=click.Choice(auth_choices),
+        default="auto",
+    )
+    api_key_env = click.prompt("API key env var", default=meta["api_key_env"])
+
+    detected_cli = detect_worker_cmd()
+    if detected_cli:
+        click.echo(f"Detected worker CLI: {detected_cli} ✓")
+    else:
+        click.echo("Warning: No worker CLI found (claude/codex/gemini). Install one before running.")
+
     init_aide(path)
+
+    config_path = path / ".aide" / "config.json"
+    existing = json.loads(config_path.read_text())
+    existing.update({
+        "provider": provider,
+        "model": model,
+        "auth_mode": auth_mode,
+        "api_key_env": api_key_env,
+    })
+    config_path.write_text(json.dumps(existing, indent=2))
+
     click.echo(f"AIDE initialized at {path}")
 
 
@@ -40,30 +77,31 @@ def init(repo_path):
 @click.option("--verify", "verify_cmd", default=None)
 def run(prompt, task_file, repo, agents, verify_cmd):
     """Run agents on a task prompt or .md file."""
-    # Validate: require prompt or file, not both, not neither
     if prompt and task_file:
         click.echo("Error: provide either a prompt or --file, not both.")
         raise SystemExit(1)
     if not prompt and not task_file:
-        click.echo("Error: provide a prompt or --file.")
+        click.echo("Error: provide a prompt or --file.", err=True)
         raise SystemExit(1)
 
     repo_path = Path(repo).resolve()
 
     if not is_initialized(repo_path):
-        click.echo(f"Error: AIDE is not initialized at {repo_path}. Run 'aide init' first.")
+        click.echo(f"Error: AIDE is not initialized at {repo_path}. Run 'aide init' first.", err=True)
         raise SystemExit(1)
 
     if task_file:
         prompt = Path(task_file).read_text()
 
     config = get_config(repo_path)
+
     plan = plan_task(
         prompt,
-        model=config.get("anthropic_model", "claude-opus-4-7"),
-        agent_count_override=agents,
+        provider=config.get("provider", "anthropic"),
+        model=config.get("model"),
         auth_mode=config.get("auth_mode", "auto"),
-        claude_cmd=config.get("claude_cmd", "claude"),
+        api_key_env=config.get("api_key_env"),
+        agent_count_override=agents,
     )
 
     taskbox = Taskbox(repo_path / ".aide" / "aide.db")
@@ -75,7 +113,7 @@ def run(prompt, task_file, repo, agents, verify_cmd):
             taskbox,
             max_concurrent=config.get("max_concurrent_workers", 20),
             verify_cmd=verify_cmd or config.get("verify_command"),
-            claude_cmd="claude",
+            worker_cmd=config.get("worker_cmd", "auto"),
             worker_timeout=config.get("worker_timeout_seconds", 120),
         )
     )
@@ -95,12 +133,12 @@ def status(repo, run_id):
     taskbox = Taskbox(repo_path / ".aide" / "aide.db")
 
     if run_id:
-        run = taskbox.get_run(run_id)
-        if not run:
+        run_rec = taskbox.get_run(run_id)
+        if not run_rec:
             click.echo(f"Run {run_id} not found.")
             return
-        completed_at = run.completed_at.isoformat() if run.completed_at else "running"
-        click.echo(f"{run.id}: {run.status} ({completed_at})")
+        completed_at = run_rec.completed_at.isoformat() if run_rec.completed_at else "running"
+        click.echo(f"{run_rec.id}: {run_rec.status} ({completed_at})")
         tasks = taskbox.get_tasks(run_id)
         for task in tasks:
             click.echo(f"  {task.id}: {task.status} — {task.description}")
@@ -109,9 +147,9 @@ def status(repo, run_id):
         if not runs:
             click.echo("No runs found.")
             return
-        for run in runs[:5]:
-            completed_at = run.completed_at.isoformat() if run.completed_at else "running"
-            click.echo(f"{run.id}: {run.status} ({completed_at})")
+        for run_rec in runs[:5]:
+            completed_at = run_rec.completed_at.isoformat() if run_rec.completed_at else "running"
+            click.echo(f"{run_rec.id}: {run_rec.status} ({completed_at})")
 
 
 @main.command()
