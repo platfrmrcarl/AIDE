@@ -41,7 +41,6 @@ def test_detect_worker_cmd_returns_none_if_none_found(monkeypatch):
     assert detect_worker_cmd() is None
 
 
-@pytest.mark.skip(reason="anthropic.py not yet created")
 def test_get_provider_anthropic():
     mod = get_provider("anthropic")
     assert hasattr(mod, "generate")
