@@ -4,9 +4,9 @@ import pytest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from galaxy.manager import run_manager
-from galaxy.models import Message, Plan, SubTask
-from galaxy.workspace import init_galaxy
+from aide.manager import run_manager
+from aide.models import Message, Plan, SubTask
+from aide.workspace import init_aide
 
 
 def _make_plan(tasks=None, run_id="testrun1"):
@@ -23,9 +23,9 @@ def _make_plan(tasks=None, run_id="testrun1"):
 
 def _fake_create(git_repo):
     def _create(repo_path, run_id, agent_id):
-        p = git_repo / f".galaxy/worktrees/{agent_id}"
+        p = git_repo / f".aide/worktrees/{agent_id}"
         p.mkdir(parents=True, exist_ok=True)
-        return p, f"galaxy/{run_id}/{agent_id}"
+        return p, f"aide/{run_id}/{agent_id}"
     return _create
 
 
@@ -43,13 +43,13 @@ def _make_fake_worker(db):
 
 @pytest.mark.asyncio
 async def test_manager_single_task_success(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "complete"
@@ -59,7 +59,7 @@ async def test_manager_single_task_success(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_task_dependency_order(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     tasks = [
         SubTask(id="t1", description="First", depends_on=[]),
         SubTask(id="t2", description="Second", depends_on=["t1"]),
@@ -77,10 +77,10 @@ async def test_manager_task_dependency_order(db, git_repo):
         ))
         db.update_agent_status(kwargs["agent_id"], "done")
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_ordered_worker), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_ordered_worker), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "complete"
@@ -90,13 +90,13 @@ async def test_manager_task_dependency_order(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_failed_integration_marks_task_failed(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(False, "tests failed")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(False, "tests failed")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "failed"
@@ -105,13 +105,13 @@ async def test_manager_failed_integration_marks_task_failed(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_run_saved_to_taskbox(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         await run_manager(plan, git_repo, db, verify_cmd="true")
 
     run_rec = db.get_run(plan.run_id)
@@ -121,7 +121,7 @@ async def test_manager_run_saved_to_taskbox(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_dependent_task_fails_when_dep_fails(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     tasks = [
         SubTask(id="t1", description="First", depends_on=[]),
         SubTask(id="t2", description="Blocked by t1", depends_on=["t1"]),
@@ -136,10 +136,10 @@ async def test_manager_dependent_task_fails_when_dep_fails(db, git_repo):
             created_at=datetime.utcnow(),
         ))
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_failing_worker), \
-         patch("galaxy.manager.integrate_worktree", return_value=(False, "tests failed")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_failing_worker), \
+         patch("aide.manager.integrate_worktree", return_value=(False, "tests failed")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["failed"] >= 1

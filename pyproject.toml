@@ -4,7 +4,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "galaxy-caid"
+name = "aide"
 version = "0.1.0"
 description = "CAID multi-agent AI orchestrator using git worktrees"
 requires-python = ">=3.11"
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-galaxy = "galaxy.cli:main"
+aide = "aide.cli:main"
 
 [project.optional-dependencies]
 dev = [

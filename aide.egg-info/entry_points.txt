@@ -1,0 +1,2 @@
+[console_scripts]
+aide = aide.cli:main

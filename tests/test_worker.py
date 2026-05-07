@@ -1,14 +1,14 @@
 import asyncio
 import stat
 import pytest
-from galaxy.models import AgentRecord
-from galaxy.worker import run_worker
+from aide.models import AgentRecord
+from aide.worker import run_worker
 
 
 def make_agent(db, worktree):
     agent = AgentRecord(
         id="a1", run_id="r1", worktree_path=str(worktree),
-        branch="galaxy/r1/a1", task_id="t1",
+        branch="aide/r1/a1", task_id="t1",
     )
     db.save_agent(agent)
     return agent

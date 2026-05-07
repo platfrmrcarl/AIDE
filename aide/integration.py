@@ -27,7 +27,7 @@ def run_verify(path: Path, verify_cmd: str | None = None) -> tuple[bool, str]:
 
 def merge_branch(repo_path: Path, branch: str) -> tuple[bool, str]:
     result = subprocess.run(
-        ["git", "merge", "--no-ff", branch, "-m", f"galaxy: merge {branch}"],
+        ["git", "merge", "--no-ff", branch, "-m", f"aide: merge {branch}"],
         cwd=repo_path,
         capture_output=True,
         text=True,

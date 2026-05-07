@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime
-from galaxy.taskbox import Taskbox
-from galaxy.models import SubTask, Message, AgentRecord, RunRecord
+from aide.taskbox import Taskbox
+from aide.models import SubTask, Message, AgentRecord, RunRecord
 
 
 def test_init_creates_tables(db):
@@ -79,7 +79,7 @@ def test_get_run_missing(db):
 
 def test_save_and_get_agents(db):
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     db.save_agent(agent)
     agents = db.get_agents("r1")
     assert len(agents) == 1
@@ -88,7 +88,7 @@ def test_save_and_get_agents(db):
 
 def test_update_agent_status(db):
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     db.save_agent(agent)
     db.update_agent_status("a1", "working", pid=12345)
     agents = db.get_agents("r1")

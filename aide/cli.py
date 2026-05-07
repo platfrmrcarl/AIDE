@@ -9,7 +9,7 @@ from .taskbox import Taskbox
 from .workspace import (
     delete_worktree,
     get_config,
-    init_galaxy,
+    init_aide,
     is_initialized,
     list_worktrees,
 )
@@ -23,13 +23,13 @@ def main():
 @main.command()
 @click.argument("repo_path", default=".", type=click.Path())
 def init(repo_path):
-    """Initialize galaxy for a git repository."""
+    """Initialize AIDE for a git repository."""
     path = Path(repo_path).resolve()
     if is_initialized(path):
-        click.echo(f"galaxy already initialized at {path}")
+        click.echo(f"AIDE already initialized at {path}")
         return
-    init_galaxy(path)
-    click.echo(f"galaxy initialized at {path}")
+    init_aide(path)
+    click.echo(f"AIDE initialized at {path}")
 
 
 @main.command()
@@ -51,7 +51,7 @@ def run(prompt, task_file, repo, agents, verify_cmd):
     repo_path = Path(repo).resolve()
 
     if not is_initialized(repo_path):
-        click.echo(f"Error: galaxy is not initialized at {repo_path}. Run 'galaxy init' first.")
+        click.echo(f"Error: AIDE is not initialized at {repo_path}. Run 'aide init' first.")
         raise SystemExit(1)
 
     if task_file:
@@ -66,7 +66,7 @@ def run(prompt, task_file, repo, agents, verify_cmd):
         claude_cmd=config.get("claude_cmd", "claude"),
     )
 
-    taskbox = Taskbox(repo_path / ".galaxy" / "galaxy.db")
+    taskbox = Taskbox(repo_path / ".aide" / "aide.db")
 
     result = asyncio.run(
         run_manager(
@@ -92,7 +92,7 @@ def run(prompt, task_file, repo, agents, verify_cmd):
 def status(repo, run_id):
     """Show status of runs."""
     repo_path = Path(repo).resolve()
-    taskbox = Taskbox(repo_path / ".galaxy" / "galaxy.db")
+    taskbox = Taskbox(repo_path / ".aide" / "aide.db")
 
     if run_id:
         run = taskbox.get_run(run_id)

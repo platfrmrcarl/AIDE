@@ -1,6 +1,6 @@
 from datetime import datetime
 import pytest
-from galaxy.models import SubTask, Plan, Message, AgentRecord, RunRecord
+from aide.models import SubTask, Plan, Message, AgentRecord, RunRecord
 
 
 def test_subtask_defaults():
@@ -33,7 +33,7 @@ def test_message_defaults():
 
 def test_agent_record_defaults():
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     assert agent.status == "idle"
     assert agent.pid is None
     assert isinstance(agent.last_heartbeat, datetime)

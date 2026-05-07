@@ -1,7 +1,7 @@
 import subprocess
 import pytest
 from pathlib import Path
-from galaxy.integration import (
+from aide.integration import (
     detect_verify_command,
     integrate_worktree,
     merge_branch,

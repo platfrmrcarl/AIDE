@@ -1,12 +1,12 @@
 import subprocess
 import pytest
 from pathlib import Path
-from galaxy.workspace import (
+from aide.workspace import (
     detect_verify_command,
     create_worktree,
     delete_worktree,
     get_config,
-    init_galaxy,
+    init_aide,
     is_initialized,
     list_worktrees,
     symlink_env_files,
@@ -17,46 +17,46 @@ def test_is_initialized_false(git_repo):
     assert not is_initialized(git_repo)
 
 
-def test_init_galaxy(git_repo):
-    galaxy_dir = init_galaxy(git_repo)
+def test_init_aide(git_repo):
+    aide_dir = init_aide(git_repo)
     assert is_initialized(git_repo)
-    assert (galaxy_dir / "worktrees").exists()
-    assert (galaxy_dir / "runs").exists()
-    assert (galaxy_dir / "config.json").exists()
+    assert (aide_dir / "worktrees").exists()
+    assert (aide_dir / "runs").exists()
+    assert (aide_dir / "config.json").exists()
 
 
-def test_init_galaxy_idempotent(git_repo):
-    init_galaxy(git_repo)
-    init_galaxy(git_repo)
+def test_init_aide_idempotent(git_repo):
+    init_aide(git_repo)
+    init_aide(git_repo)
     assert is_initialized(git_repo)
 
 
 def test_get_config(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     config = get_config(git_repo)
     assert "worker_timeout_seconds" in config
     assert config["max_concurrent_workers"] == 20
 
 
 def test_create_and_delete_worktree(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     wt_path, branch = create_worktree(git_repo, "run123", "agent-001")
     assert wt_path.exists()
-    assert branch == "galaxy/run123/agent-001"
+    assert branch == "aide/run123/agent-001"
     delete_worktree(git_repo, wt_path)
     assert not wt_path.exists()
 
 
-def test_list_worktrees_includes_galaxy_branch(git_repo):
-    init_galaxy(git_repo)
+def test_list_worktrees_includes_aide_branch(git_repo):
+    init_aide(git_repo)
     create_worktree(git_repo, "run123", "agent-001")
     worktrees = list_worktrees(git_repo)
     branches = [w.get("branch", "") for w in worktrees]
-    assert any("galaxy/run123/agent-001" in b for b in branches)
+    assert any("aide/run123/agent-001" in b for b in branches)
 
 
 def test_symlink_env_files(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     (git_repo / ".env").write_text("KEY=val")
     wt_path, _ = create_worktree(git_repo, "run123", "agent-001")
     linked = symlink_env_files(wt_path, git_repo)

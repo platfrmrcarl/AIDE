@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from pathlib import Path
 from click.testing import CliRunner
-from galaxy.taskbox import Taskbox
+from aide.taskbox import Taskbox
 
 
 @pytest.fixture

@@ -1,4 +1,4 @@
-# Galaxy: CAID Multi-Agent Orchestrator — Design Spec
+# AIDE: CAID Multi-Agent Orchestrator — Design Spec
 
 **Date:** 2026-05-07  
 **Status:** Approved  
@@ -8,7 +8,7 @@
 
 ## Overview
 
-`galaxy` is a Python CLI tool that implements Centralized Asynchronous Isolated Delegation (CAID) for distributing coding tasks across multiple AI agents (Claude Code). Each agent operates in an isolated git worktree to prevent conflicts. A Manager orchestrator decomposes tasks into a Directed Acyclic Graph (DAG), fans out to N workers, monitors progress via SQLite, and integrates completed work back to the main branch.
+`aide` is a Python CLI tool that implements Centralized Asynchronous Isolated Delegation (CAID) for distributing coding tasks across multiple AI agents (Claude Code). Each agent operates in an isolated git worktree to prevent conflicts. A Manager orchestrator decomposes tasks into a Directed Acyclic Graph (DAG), fans out to N workers, monitors progress via SQLite, and integrates completed work back to the main branch.
 
 ---
 
@@ -19,7 +19,7 @@
 3. Provision isolated git worktrees for each agent
 4. Delegate subtasks asynchronously to Claude Code CLI workers
 5. Integrate completed work with test-gating and merge management
-6. Expose a clean CLI: `galaxy init`, `galaxy run`, `galaxy status`, `galaxy clean`
+6. Expose a clean CLI: `aide init`, `aide run`, `aide status`, `aide clean`
 
 ---
 
@@ -69,6 +69,8 @@ Plan stored in runs/<id>/plan.json           Workers (N subprocesses)
 | `worker.py` | Wraps `claude --print` subprocess; writes stdout to Taskbox |
 | `manager.py` | asyncio event loop — fan-out, monitor, trigger integration |
 | `integration.py` | Run verify command → merge branch → notify dependent workers |
+
+(Module paths are under `aide/` after the package rename.)
 
 ---
 
@@ -213,12 +215,12 @@ The Planner sends a structured system prompt instructing Claude to output JSON:
 
 ### Worktree Layout
 ```
-<repo>/.galaxy/
+<repo>/.aide/
   worktrees/
-    agent-001/    # git worktree on branch galaxy/<run-id>/agent-001
+    agent-001/    # git worktree on branch aide/<run-id>/agent-001
     agent-002/
     ...
-  galaxy.db       # SQLite Taskbox
+  aide.db         # SQLite Taskbox
   runs/
     <run-id>/
       plan.json
@@ -226,7 +228,7 @@ The Planner sends a structured system prompt instructing Claude to output JSON:
 ```
 
 ### Operations
-- `init_galaxy(repo_path)` — creates `.galaxy/` structure, initializes `galaxy.db`
+- `init_aide(repo_path)` — creates `.aide/` structure, initializes `aide.db`
 - `create_worktree(repo_path, run_id, agent_id)` → `(worktree_path, branch_name)`
 - `delete_worktree(repo_path, worktree_path)`
 - `list_worktrees(repo_path)` → list of active worktrees
@@ -266,7 +268,7 @@ The Manager uses `asyncio.gather` to run all active workers concurrently.
 
 For each completed worktree:
 1. Run the repo's verify command (auto-detected: `pytest`, `npm test`, `make test`, or configurable)
-2. If tests pass: `git merge <branch>` into a `galaxy/<run-id>/staging` branch
+2. If tests pass: `git merge <branch>` into a `aide/<run-id>/staging` branch
 3. Send SYNC message to all active workers so they can `git rebase staging`
 4. If tests fail: send ERROR back to Manager; Manager spawns a fix agent
 
@@ -275,20 +277,20 @@ For each completed worktree:
 ## CLI Commands
 
 ```bash
-# Initialize galaxy for a repo
-galaxy init [REPO_PATH]          # default: current directory
+# Initialize AIDE for a repo
+aide init [REPO_PATH]          # default: current directory
 
 # Run from prompt
-galaxy run "PROMPT" [--repo PATH] [--agents N] [--verify CMD]
+aide run "PROMPT" [--repo PATH] [--agents N] [--verify CMD]
 
 # Run from .md file
-galaxy run --file tasks.md [--repo PATH] [--agents N]
+aide run --file tasks.md [--repo PATH] [--agents N]
 
 # Monitor current/last run
-galaxy status [--run-id ID]
+aide status [--run-id ID]
 
 # Clean finished worktrees
-galaxy clean [--repo PATH] [--all]
+aide clean [--repo PATH] [--all]
 ```
 
 ---
@@ -332,16 +334,16 @@ All external dependencies (Anthropic API, `claude` subprocess, git) are mocked i
 
 ```toml
 [project]
-name = "galaxy-caid"
+name = "aide"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = ["anthropic>=0.40.0", "click>=8.0"]
 
 [project.scripts]
-galaxy = "galaxy.cli:main"
+aide = "aide.cli:main"
 ```
 
-Install: `pip install -e .` (dev) or `pip install galaxy-caid` (release)
+Install: `pip install -e .` (dev) or `pip install aide` (release)
 
 ---
 
@@ -356,7 +358,7 @@ Install: `pip install -e .` (dev) or `pip install galaxy-caid` (release)
 
 ## Configuration
 
-`<repo>/.galaxy/config.json` (created by `galaxy init`):
+`<repo>/.aide/config.json` (created by `aide init`):
 ```json
 {
   "verify_command": "pytest",
@@ -373,9 +375,9 @@ Install: `pip install -e .` (dev) or `pip install galaxy-caid` (release)
 
 ## Success Criteria
 
-- `galaxy init` creates `.galaxy/` structure without error
-- `galaxy run "small task"` spawns 3 agents, merges all branches, exits 0
-- `galaxy run "large task" --agents 50` spawns 50 agents across 50 worktrees
+- `aide init` creates `.aide/` structure without error
+- `aide run "small task"` spawns 3 agents, merges all branches, exits 0
+- `aide run "large task" --agents 50` spawns 50 agents across 50 worktrees
 - All unit tests pass with `pytest`
 - No git conflicts between concurrent workers
-- `galaxy clean` removes all finished worktrees and their branches
+- `aide clean` removes all finished worktrees and their branches

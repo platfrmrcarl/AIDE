@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `galaxy-caid`, a Python CLI tool that uses CAID (Centralized Async Isolated Delegation) to fan out coding tasks across N Claude Code workers in isolated git worktrees.
+**Goal:** Build `aide`, a Python CLI tool that uses CAID (Centralized Async Isolated Delegation) to fan out coding tasks across N Claude Code workers in isolated git worktrees.
 
 **Architecture:** Planner (Anthropic API) decomposes a prompt into a subtask DAG, Manager (asyncio) fans out to Worker subprocesses each running `claude --print` in its own git worktree, and Integration Engine test-gates + merges completed work back to main. SQLite Taskbox handles all inter-component messaging.
 
@@ -15,15 +15,15 @@
 | File | Responsibility |
 |---|---|
 | `pyproject.toml` | Package config, entry point, dependencies |
-| `galaxy/__init__.py` | Package init |
-| `galaxy/models.py` | Dataclasses: SubTask, Plan, Message, AgentRecord, RunRecord |
-| `galaxy/taskbox.py` | SQLite message bus — CRUD for tasks/messages/agents/runs |
-| `galaxy/workspace.py` | Git worktree lifecycle, .galaxy/ init, env symlinking |
-| `galaxy/planner.py` | Anthropic API call → subtask DAG + agent count |
-| `galaxy/worker.py` | Async subprocess wrapping `claude --print` in a worktree |
-| `galaxy/integration.py` | Run verify command + git merge |
-| `galaxy/manager.py` | asyncio orchestrator — fan-out, monitor Taskbox, trigger integration |
-| `galaxy/cli.py` | Click CLI: init, run, status, clean |
+| `aide/__init__.py` | Package init |
+| `aide/models.py` | Dataclasses: SubTask, Plan, Message, AgentRecord, RunRecord |
+| `aide/taskbox.py` | SQLite message bus — CRUD for tasks/messages/agents/runs |
+| `aide/workspace.py` | Git worktree lifecycle, .aide/ init, env symlinking |
+| `aide/planner.py` | Anthropic API call → subtask DAG + agent count |
+| `aide/worker.py` | Async subprocess wrapping `claude --print` in a worktree |
+| `aide/integration.py` | Run verify command + git merge |
+| `aide/manager.py` | asyncio orchestrator — fan-out, monitor Taskbox, trigger integration |
+| `aide/cli.py` | Click CLI: init, run, status, clean |
 | `tests/conftest.py` | Shared pytest fixtures (git_repo, db, runner) |
 | `tests/test_models.py` | Model construction and defaults |
 | `tests/test_taskbox.py` | SQLite CRUD, message lifecycle |
@@ -41,7 +41,7 @@
 
 **Files:**
 - Create: `pyproject.toml`
-- Create: `galaxy/__init__.py`
+- Create: `aide/__init__.py`
 - Create: `tests/__init__.py`
 - Create: `tests/conftest.py`
 
@@ -53,7 +53,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "galaxy-caid"
+name = "aide"
 version = "0.1.0"
 description = "CAID multi-agent AI orchestrator using git worktrees"
 requires-python = ">=3.11"
@@ -63,7 +63,7 @@ dependencies = [
 ]
 
 [project.scripts]
-galaxy = "galaxy.cli:main"
+aide = "aide.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -80,8 +80,8 @@ testpaths = ["tests"]
 - [ ] **Step 2: Create package and test directories**
 
 ```bash
-mkdir -p galaxy tests
-touch galaxy/__init__.py tests/__init__.py
+mkdir -p aide tests
+touch aide/__init__.py tests/__init__.py
 ```
 
 - [ ] **Step 3: Create `tests/conftest.py`**
@@ -92,7 +92,7 @@ import tempfile
 import pytest
 from pathlib import Path
 from click.testing import CliRunner
-from galaxy.taskbox import Taskbox
+from aide.taskbox import Taskbox
 
 
 @pytest.fixture
@@ -124,7 +124,7 @@ def runner():
 pip install -e ".[dev]"
 ```
 
-Expected: `Successfully installed galaxy-caid-0.1.0`
+Expected: `Successfully installed aide-0.1.0`
 
 - [ ] **Step 5: Verify pytest runs**
 
@@ -137,7 +137,7 @@ Expected: `no tests ran` (0 collected)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml galaxy/__init__.py tests/__init__.py tests/conftest.py
+git add pyproject.toml aide/__init__.py tests/__init__.py tests/conftest.py
 git commit -m "feat: project scaffold with pyproject.toml"
 ```
 
@@ -146,7 +146,7 @@ git commit -m "feat: project scaffold with pyproject.toml"
 ## Task 2: Data Models
 
 **Files:**
-- Create: `galaxy/models.py`
+- Create: `aide/models.py`
 - Create: `tests/test_models.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_models.py`**
@@ -154,7 +154,7 @@ git commit -m "feat: project scaffold with pyproject.toml"
 ```python
 from datetime import datetime
 import pytest
-from galaxy.models import SubTask, Plan, Message, AgentRecord, RunRecord
+from aide.models import SubTask, Plan, Message, AgentRecord, RunRecord
 
 
 def test_subtask_defaults():
@@ -187,7 +187,7 @@ def test_message_defaults():
 
 def test_agent_record_defaults():
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     assert agent.status == "idle"
     assert agent.pid is None
     assert isinstance(agent.last_heartbeat, datetime)
@@ -206,9 +206,9 @@ def test_run_record_defaults():
 pytest tests/test_models.py -v
 ```
 
-Expected: `ImportError: cannot import name 'SubTask' from 'galaxy.models'`
+Expected: `ImportError: cannot import name 'SubTask' from 'aide.models'`
 
-- [ ] **Step 3: Create `galaxy/models.py`**
+- [ ] **Step 3: Create `aide/models.py`**
 
 ```python
 from dataclasses import dataclass, field
@@ -281,7 +281,7 @@ Expected: `6 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/models.py tests/test_models.py
+git add aide/models.py tests/test_models.py
 git commit -m "feat: data models with TDD"
 ```
 
@@ -290,7 +290,7 @@ git commit -m "feat: data models with TDD"
 ## Task 3: Taskbox (SQLite Message Bus)
 
 **Files:**
-- Create: `galaxy/taskbox.py`
+- Create: `aide/taskbox.py`
 - Create: `tests/test_taskbox.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_taskbox.py`**
@@ -298,8 +298,8 @@ git commit -m "feat: data models with TDD"
 ```python
 import pytest
 from datetime import datetime
-from galaxy.taskbox import Taskbox
-from galaxy.models import SubTask, Message, AgentRecord, RunRecord
+from aide.taskbox import Taskbox
+from aide.models import SubTask, Message, AgentRecord, RunRecord
 
 
 def test_init_creates_tables(db):
@@ -377,7 +377,7 @@ def test_get_run_missing(db):
 
 def test_save_and_get_agents(db):
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     db.save_agent(agent)
     agents = db.get_agents("r1")
     assert len(agents) == 1
@@ -386,7 +386,7 @@ def test_save_and_get_agents(db):
 
 def test_update_agent_status(db):
     agent = AgentRecord(id="a1", run_id="r1", worktree_path="/tmp/wt",
-                        branch="galaxy/r1/a1", task_id="t1")
+                        branch="aide/r1/a1", task_id="t1")
     db.save_agent(agent)
     db.update_agent_status("a1", "working", pid=12345)
     agents = db.get_agents("r1")
@@ -400,9 +400,9 @@ def test_update_agent_status(db):
 pytest tests/test_taskbox.py -v
 ```
 
-Expected: `ImportError: cannot import name 'Taskbox' from 'galaxy.taskbox'`
+Expected: `ImportError: cannot import name 'Taskbox' from 'aide.taskbox'`
 
-- [ ] **Step 3: Create `galaxy/taskbox.py`**
+- [ ] **Step 3: Create `aide/taskbox.py`**
 
 ```python
 import json
@@ -605,7 +605,7 @@ Expected: `11 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/taskbox.py tests/test_taskbox.py
+git add aide/taskbox.py tests/test_taskbox.py
 git commit -m "feat: SQLite taskbox message bus with TDD"
 ```
 
@@ -614,7 +614,7 @@ git commit -m "feat: SQLite taskbox message bus with TDD"
 ## Task 4: Workspace Manager
 
 **Files:**
-- Create: `galaxy/workspace.py`
+- Create: `aide/workspace.py`
 - Create: `tests/test_workspace.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_workspace.py`**
@@ -623,12 +623,12 @@ git commit -m "feat: SQLite taskbox message bus with TDD"
 import subprocess
 import pytest
 from pathlib import Path
-from galaxy.workspace import (
+from aide.workspace import (
     detect_verify_command,
     create_worktree,
     delete_worktree,
     get_config,
-    init_galaxy,
+    init_aide,
     is_initialized,
     list_worktrees,
     symlink_env_files,
@@ -639,46 +639,46 @@ def test_is_initialized_false(git_repo):
     assert not is_initialized(git_repo)
 
 
-def test_init_galaxy(git_repo):
-    galaxy_dir = init_galaxy(git_repo)
+def test_init_aide(git_repo):
+    aide_dir = init_aide(git_repo)
     assert is_initialized(git_repo)
-    assert (galaxy_dir / "worktrees").exists()
-    assert (galaxy_dir / "runs").exists()
-    assert (galaxy_dir / "config.json").exists()
+    assert (aide_dir / "worktrees").exists()
+    assert (aide_dir / "runs").exists()
+    assert (aide_dir / "config.json").exists()
 
 
-def test_init_galaxy_idempotent(git_repo):
-    init_galaxy(git_repo)
-    init_galaxy(git_repo)
+def test_init_aide_idempotent(git_repo):
+    init_aide(git_repo)
+    init_aide(git_repo)
     assert is_initialized(git_repo)
 
 
 def test_get_config(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     config = get_config(git_repo)
     assert "worker_timeout_seconds" in config
     assert config["max_concurrent_workers"] == 20
 
 
 def test_create_and_delete_worktree(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     wt_path, branch = create_worktree(git_repo, "run123", "agent-001")
     assert wt_path.exists()
-    assert branch == "galaxy/run123/agent-001"
+    assert branch == "aide/run123/agent-001"
     delete_worktree(git_repo, wt_path)
     assert not wt_path.exists()
 
 
 def test_list_worktrees_includes_galaxy_branch(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     create_worktree(git_repo, "run123", "agent-001")
     worktrees = list_worktrees(git_repo)
     branches = [w.get("branch", "") for w in worktrees]
-    assert any("galaxy/run123/agent-001" in b for b in branches)
+    assert any("aide/run123/agent-001" in b for b in branches)
 
 
 def test_symlink_env_files(git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     (git_repo / ".env").write_text("KEY=val")
     wt_path, _ = create_worktree(git_repo, "run123", "agent-001")
     linked = symlink_env_files(wt_path, git_repo)
@@ -707,27 +707,27 @@ def test_detect_verify_command_none(git_repo):
 pytest tests/test_workspace.py -v
 ```
 
-Expected: `ImportError: cannot import name 'is_initialized' from 'galaxy.workspace'`
+Expected: `ImportError: cannot import name 'is_initialized' from 'aide.workspace'`
 
-- [ ] **Step 3: Create `galaxy/workspace.py`**
+- [ ] **Step 3: Create `aide/workspace.py`**
 
 ```python
 import json
 import subprocess
 from pathlib import Path
 
-_GALAXY_DIR = ".galaxy"
+_AIDE_DIR = ".aide"
 
 
 def is_initialized(repo_path: Path) -> bool:
-    return (repo_path / _GALAXY_DIR).exists()
+    return (repo_path / _AIDE_DIR).exists()
 
 
-def init_galaxy(repo_path: Path) -> Path:
-    galaxy_dir = repo_path / _GALAXY_DIR
-    (galaxy_dir / "worktrees").mkdir(parents=True, exist_ok=True)
-    (galaxy_dir / "runs").mkdir(parents=True, exist_ok=True)
-    config_path = galaxy_dir / "config.json"
+def init_aide(repo_path: Path) -> Path:
+    aide_dir = repo_path / _AIDE_DIR
+    (aide_dir / "worktrees").mkdir(parents=True, exist_ok=True)
+    (aide_dir / "runs").mkdir(parents=True, exist_ok=True)
+    config_path = aide_dir / "config.json"
     if not config_path.exists():
         config_path.write_text(
             json.dumps(
@@ -741,19 +741,19 @@ def init_galaxy(repo_path: Path) -> Path:
                 indent=2,
             )
         )
-    return galaxy_dir
+    return aide_dir
 
 
 def get_config(repo_path: Path) -> dict:
-    config_path = repo_path / _GALAXY_DIR / "config.json"
+    config_path = repo_path / _AIDE_DIR / "config.json"
     if config_path.exists():
         return json.loads(config_path.read_text())
     return {}
 
 
 def create_worktree(repo_path: Path, run_id: str, agent_id: str) -> tuple[Path, str]:
-    branch = f"galaxy/{run_id}/{agent_id}"
-    worktree_path = repo_path / _GALAXY_DIR / "worktrees" / agent_id
+    branch = f"aide/{run_id}/{agent_id}"
+    worktree_path = repo_path / _AIDE_DIR / "worktrees" / agent_id
     subprocess.run(
         ["git", "worktree", "add", "-b", branch, str(worktree_path)],
         cwd=repo_path,
@@ -829,7 +829,7 @@ Expected: `10 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/workspace.py tests/test_workspace.py
+git add aide/workspace.py tests/test_workspace.py
 git commit -m "feat: git worktree workspace manager with TDD"
 ```
 
@@ -838,7 +838,7 @@ git commit -m "feat: git worktree workspace manager with TDD"
 ## Task 5: Planner (Anthropic API)
 
 **Files:**
-- Create: `galaxy/planner.py`
+- Create: `aide/planner.py`
 - Create: `tests/test_planner.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_planner.py`**
@@ -847,8 +847,8 @@ git commit -m "feat: git worktree workspace manager with TDD"
 import json
 import pytest
 from unittest.mock import MagicMock, patch
-from galaxy.models import Plan, SubTask
-from galaxy.planner import compute_agent_count, plan_task
+from aide.models import Plan, SubTask
+from aide.planner import compute_agent_count, plan_task
 
 MOCK_API_RESPONSE = json.dumps({
     "complexity_score": 25,
@@ -895,7 +895,7 @@ def test_compute_agent_count_very_large():
 
 
 def test_plan_task_returns_plan():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API")
 
     assert isinstance(plan, Plan)
@@ -906,7 +906,7 @@ def test_plan_task_returns_plan():
 
 
 def test_plan_task_agent_count_override():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API", agent_count_override=42)
 
     assert plan.agent_count == 42
@@ -914,14 +914,14 @@ def test_plan_task_agent_count_override():
 
 def test_plan_task_handles_json_in_code_block():
     wrapped = f"```json\n{MOCK_API_RESPONSE}\n```"
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(wrapped)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(wrapped)):
         plan = plan_task("Build a REST API")
 
     assert len(plan.tasks) == 3
 
 
 def test_plan_task_subtask_types():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API")
 
     for task in plan.tasks:
@@ -935,9 +935,9 @@ def test_plan_task_subtask_types():
 pytest tests/test_planner.py -v
 ```
 
-Expected: `ImportError: cannot import name 'compute_agent_count' from 'galaxy.planner'`
+Expected: `ImportError: cannot import name 'compute_agent_count' from 'aide.planner'`
 
-- [ ] **Step 3: Create `galaxy/planner.py`**
+- [ ] **Step 3: Create `aide/planner.py`**
 
 ```python
 import json
@@ -1040,7 +1040,7 @@ Expected: `9 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/planner.py tests/test_planner.py
+git add aide/planner.py tests/test_planner.py
 git commit -m "feat: Anthropic API planner with TDD"
 ```
 
@@ -1049,7 +1049,7 @@ git commit -m "feat: Anthropic API planner with TDD"
 ## Task 6: Worker (Async Subprocess)
 
 **Files:**
-- Create: `galaxy/worker.py`
+- Create: `aide/worker.py`
 - Create: `tests/test_worker.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_worker.py`**
@@ -1058,14 +1058,14 @@ git commit -m "feat: Anthropic API planner with TDD"
 import asyncio
 import stat
 import pytest
-from galaxy.models import AgentRecord
-from galaxy.worker import run_worker
+from aide.models import AgentRecord
+from aide.worker import run_worker
 
 
 def make_agent(db, worktree):
     agent = AgentRecord(
         id="a1", run_id="r1", worktree_path=str(worktree),
-        branch="galaxy/r1/a1", task_id="t1",
+        branch="aide/r1/a1", task_id="t1",
     )
     db.save_agent(agent)
     return agent
@@ -1150,9 +1150,9 @@ async def test_worker_updates_agent_status_to_working(db, tmp_path):
 pytest tests/test_worker.py -v
 ```
 
-Expected: `ImportError: cannot import name 'run_worker' from 'galaxy.worker'`
+Expected: `ImportError: cannot import name 'run_worker' from 'aide.worker'`
 
-- [ ] **Step 3: Create `galaxy/worker.py`**
+- [ ] **Step 3: Create `aide/worker.py`**
 
 ```python
 import asyncio
@@ -1305,7 +1305,7 @@ Expected: `5 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/worker.py tests/test_worker.py
+git add aide/worker.py tests/test_worker.py
 git commit -m "feat: async worker subprocess wrapper with TDD"
 ```
 
@@ -1314,7 +1314,7 @@ git commit -m "feat: async worker subprocess wrapper with TDD"
 ## Task 7: Integration Engine
 
 **Files:**
-- Create: `galaxy/integration.py`
+- Create: `aide/integration.py`
 - Create: `tests/test_integration.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_integration.py`**
@@ -1323,7 +1323,7 @@ git commit -m "feat: async worker subprocess wrapper with TDD"
 import subprocess
 import pytest
 from pathlib import Path
-from galaxy.integration import (
+from aide.integration import (
     detect_verify_command,
     integrate_worktree,
     merge_branch,
@@ -1424,9 +1424,9 @@ def test_integrate_worktree_fails_on_bad_verify(git_repo):
 pytest tests/test_integration.py -v
 ```
 
-Expected: `ImportError: cannot import name 'detect_verify_command' from 'galaxy.integration'`
+Expected: `ImportError: cannot import name 'detect_verify_command' from 'aide.integration'`
 
-- [ ] **Step 3: Create `galaxy/integration.py`**
+- [ ] **Step 3: Create `aide/integration.py`**
 
 ```python
 import subprocess
@@ -1458,7 +1458,7 @@ def run_verify(path: Path, verify_cmd: str | None = None) -> tuple[bool, str]:
 
 def merge_branch(repo_path: Path, branch: str) -> tuple[bool, str]:
     result = subprocess.run(
-        ["git", "merge", "--no-ff", branch, "-m", f"galaxy: merge {branch}"],
+        ["git", "merge", "--no-ff", branch, "-m", f"aide: merge {branch}"],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -1492,7 +1492,7 @@ Expected: `9 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/integration.py tests/test_integration.py
+git add aide/integration.py tests/test_integration.py
 git commit -m "feat: integration engine (verify + merge) with TDD"
 ```
 
@@ -1501,7 +1501,7 @@ git commit -m "feat: integration engine (verify + merge) with TDD"
 ## Task 8: Manager (asyncio Orchestrator)
 
 **Files:**
-- Create: `galaxy/manager.py`
+- Create: `aide/manager.py`
 - Create: `tests/test_manager.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_manager.py`**
@@ -1513,9 +1513,9 @@ import pytest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from galaxy.manager import run_manager
-from galaxy.models import Message, Plan, SubTask
-from galaxy.workspace import init_galaxy
+from aide.manager import run_manager
+from aide.models import Message, Plan, SubTask
+from aide.workspace import init_aide
 
 
 def _make_plan(tasks=None, run_id="testrun1"):
@@ -1532,9 +1532,9 @@ def _make_plan(tasks=None, run_id="testrun1"):
 
 def _fake_create(git_repo):
     def _create(repo_path, run_id, agent_id):
-        p = git_repo / f".galaxy/worktrees/{agent_id}"
+        p = git_repo / f".aide/worktrees/{agent_id}"
         p.mkdir(parents=True, exist_ok=True)
-        return p, f"galaxy/{run_id}/{agent_id}"
+        return p, f"aide/{run_id}/{agent_id}"
     return _create
 
 
@@ -1552,13 +1552,13 @@ def _make_fake_worker(db):
 
 @pytest.mark.asyncio
 async def test_manager_single_task_success(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "complete"
@@ -1568,7 +1568,7 @@ async def test_manager_single_task_success(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_task_dependency_order(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     tasks = [
         SubTask(id="t1", description="First", depends_on=[]),
         SubTask(id="t2", description="Second", depends_on=["t1"]),
@@ -1586,10 +1586,10 @@ async def test_manager_task_dependency_order(db, git_repo):
         ))
         db.update_agent_status(kwargs["agent_id"], "done")
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_ordered_worker), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_ordered_worker), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "complete"
@@ -1599,13 +1599,13 @@ async def test_manager_task_dependency_order(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_failed_integration_marks_task_failed(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(False, "tests failed")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(False, "tests failed")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["status"] == "failed"
@@ -1614,13 +1614,13 @@ async def test_manager_failed_integration_marks_task_failed(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_run_saved_to_taskbox(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     plan = _make_plan()
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
-         patch("galaxy.manager.integrate_worktree", return_value=(True, "ok")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_make_fake_worker(db)), \
+         patch("aide.manager.integrate_worktree", return_value=(True, "ok")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         await run_manager(plan, git_repo, db, verify_cmd="true")
 
     run_rec = db.get_run(plan.run_id)
@@ -1630,7 +1630,7 @@ async def test_manager_run_saved_to_taskbox(db, git_repo):
 
 @pytest.mark.asyncio
 async def test_manager_dependent_task_fails_when_dep_fails(db, git_repo):
-    init_galaxy(git_repo)
+    init_aide(git_repo)
     tasks = [
         SubTask(id="t1", description="First", depends_on=[]),
         SubTask(id="t2", description="Blocked by t1", depends_on=["t1"]),
@@ -1645,10 +1645,10 @@ async def test_manager_dependent_task_fails_when_dep_fails(db, git_repo):
             created_at=datetime.utcnow(),
         ))
 
-    with patch("galaxy.manager.run_worker", new_callable=AsyncMock, side_effect=_failing_worker), \
-         patch("galaxy.manager.integrate_worktree", return_value=(False, "tests failed")), \
-         patch("galaxy.manager.create_worktree", side_effect=_fake_create(git_repo)), \
-         patch("galaxy.manager.symlink_env_files"):
+    with patch("aide.manager.run_worker", new_callable=AsyncMock, side_effect=_failing_worker), \
+         patch("aide.manager.integrate_worktree", return_value=(False, "tests failed")), \
+         patch("aide.manager.create_worktree", side_effect=_fake_create(git_repo)), \
+         patch("aide.manager.symlink_env_files"):
         result = await run_manager(plan, git_repo, db, verify_cmd="true")
 
     assert result["failed"] >= 1
@@ -1660,9 +1660,9 @@ async def test_manager_dependent_task_fails_when_dep_fails(db, git_repo):
 pytest tests/test_manager.py -v
 ```
 
-Expected: `ImportError: cannot import name 'run_manager' from 'galaxy.manager'`
+Expected: `ImportError: cannot import name 'run_manager' from 'aide.manager'`
 
-- [ ] **Step 3: Create `galaxy/manager.py`**
+- [ ] **Step 3: Create `aide/manager.py`**
 
 ```python
 import asyncio
@@ -1831,7 +1831,7 @@ Expected: `5 passed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add galaxy/manager.py tests/test_manager.py
+git add aide/manager.py tests/test_manager.py
 git commit -m "feat: asyncio manager orchestrator with TDD"
 ```
 
@@ -1840,7 +1840,7 @@ git commit -m "feat: asyncio manager orchestrator with TDD"
 ## Task 9: CLI (Click)
 
 **Files:**
-- Create: `galaxy/cli.py`
+- Create: `aide/cli.py`
 - Create: `tests/test_cli.py`
 
 - [ ] **Step 1: Write failing tests in `tests/test_cli.py`**
@@ -1848,8 +1848,8 @@ git commit -m "feat: asyncio manager orchestrator with TDD"
 ```python
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from galaxy.cli import main
-from galaxy.models import Plan, SubTask
+from aide.cli import main
+from aide.models import Plan, SubTask
 
 
 def _simple_plan():
@@ -1866,7 +1866,7 @@ def test_init_command(runner, git_repo):
     result = runner.invoke(main, ["init", str(git_repo)])
     assert result.exit_code == 0
     assert "Initialized" in result.output
-    assert (git_repo / ".galaxy").exists()
+    assert (git_repo / ".aide").exists()
 
 
 def test_init_command_idempotent(runner, git_repo):
@@ -1893,7 +1893,7 @@ def test_clean_no_worktrees(runner, git_repo):
     runner.invoke(main, ["init", str(git_repo)])
     result = runner.invoke(main, ["clean", "--repo", str(git_repo)])
     assert result.exit_code == 0
-    assert "No galaxy worktrees" in result.output
+    assert "No AIDE worktrees" in result.output
 
 
 def test_run_requires_prompt_or_file(runner, git_repo):
@@ -1902,8 +1902,8 @@ def test_run_requires_prompt_or_file(runner, git_repo):
 
 
 def test_run_with_mock_planner_and_manager(runner, git_repo):
-    with patch("galaxy.cli.plan_task", return_value=_simple_plan()) as mock_plan, \
-         patch("galaxy.cli.run_manager", new_callable=AsyncMock,
+    with patch("aide.cli.plan_task", return_value=_simple_plan()) as mock_plan, \
+         patch("aide.cli.run_manager", new_callable=AsyncMock,
                return_value={"run_id": "abc123", "status": "complete",
                              "completed": 1, "failed": 0, "total": 1}):
         result = runner.invoke(main, [
@@ -1917,8 +1917,8 @@ def test_run_from_file(runner, git_repo, tmp_path):
     task_file = tmp_path / "tasks.md"
     task_file.write_text("# Tasks\n\nBuild the auth module\n")
 
-    with patch("galaxy.cli.plan_task", return_value=_simple_plan()), \
-         patch("galaxy.cli.run_manager", new_callable=AsyncMock,
+    with patch("aide.cli.plan_task", return_value=_simple_plan()), \
+         patch("aide.cli.run_manager", new_callable=AsyncMock,
                return_value={"run_id": "abc123", "status": "complete",
                              "completed": 1, "failed": 0, "total": 1}):
         result = runner.invoke(main, [
@@ -1933,9 +1933,9 @@ def test_run_from_file(runner, git_repo, tmp_path):
 pytest tests/test_cli.py -v
 ```
 
-Expected: `ImportError: cannot import name 'main' from 'galaxy.cli'`
+Expected: `ImportError: cannot import name 'main' from 'aide.cli'`
 
-- [ ] **Step 3: Create `galaxy/cli.py`**
+- [ ] **Step 3: Create `aide/cli.py`**
 
 ```python
 import asyncio
@@ -1947,24 +1947,24 @@ from .integration import detect_verify_command
 from .manager import run_manager
 from .planner import plan_task
 from .taskbox import Taskbox
-from .workspace import get_config, init_galaxy, is_initialized, list_worktrees
+from .workspace import get_config, init_aide, is_initialized, list_worktrees
 
 
 @click.group()
 def main() -> None:
-    """galaxy — CAID multi-agent AI orchestrator."""
+    """aide — CAID multi-agent AI orchestrator."""
 
 
 @main.command()
 @click.argument("repo_path", default=".", type=click.Path(exists=True))
 def init(repo_path: str) -> None:
-    """Initialize galaxy for a repository."""
+    """Initialize AIDE for a repository."""
     path = Path(repo_path).resolve()
     if is_initialized(path):
-        click.echo(f"galaxy already initialized at {path}/.galaxy")
+        click.echo(f"AIDE already initialized at {path}/.aide")
         return
-    galaxy_dir = init_galaxy(path)
-    click.echo(f"Initialized galaxy at {galaxy_dir}")
+    aide_dir = init_aide(path)
+    click.echo(f"AIDE initialized at {aide_dir}")
 
 
 @main.command()
@@ -1986,7 +1986,7 @@ def run(
     verify_cmd: str | None,
     model: str | None,
 ) -> None:
-    """Run a task with the galaxy swarm."""
+    """Run a task with the AIDE swarm."""
     if task_file:
         prompt = Path(task_file).read_text()
     if not prompt:
@@ -1994,11 +1994,11 @@ def run(
 
     path = Path(repo_path).resolve()
     if not is_initialized(path):
-        click.echo("Initializing galaxy...")
-        init_galaxy(path)
+        click.echo("Initializing AIDE...")
+        init_aide(path)
 
     config = get_config(path)
-    db_path = path / ".galaxy" / "galaxy.db"
+    db_path = path / ".aide" / "aide.db"
     taskbox = Taskbox(db_path)
 
     planning_model = model or config.get("anthropic_model", "claude-opus-4-7")
@@ -2036,10 +2036,10 @@ def status(repo_path: str, run_id: str | None) -> None:
     """Show status of current or specified run."""
     path = Path(repo_path).resolve()
     if not is_initialized(path):
-        click.echo("galaxy not initialized. Run: galaxy init")
+        click.echo("AIDE not initialized. Run: aide init")
         return
 
-    db_path = path / ".galaxy" / "galaxy.db"
+    db_path = path / ".aide" / "aide.db"
     taskbox = Taskbox(db_path)
 
     if run_id:
@@ -2055,9 +2055,9 @@ def status(repo_path: str, run_id: str | None) -> None:
             click.echo(f"  [{t.status:12}] {t.id}: {t.description[:60]}")
     else:
         worktrees = list_worktrees(path)
-        galaxy_wt = [w for w in worktrees if "galaxy/" in w.get("branch", "")]
-        click.echo(f"Active galaxy worktrees: {len(galaxy_wt)}")
-        for wt in galaxy_wt:
+        aide_wt = [w for w in worktrees if "aide/" in w.get("branch", "")]
+        click.echo(f"Active AIDE worktrees: {len(aide_wt)}")
+        for wt in aide_wt:
             click.echo(f"  {wt.get('branch', 'unknown')} -> {wt['path']}")
 
 
@@ -2065,19 +2065,19 @@ def status(repo_path: str, run_id: str | None) -> None:
 @click.option("--repo", "-r", "repo_path", default=".",
               type=click.Path(exists=True))
 def clean(repo_path: str) -> None:
-    """Remove completed galaxy worktrees."""
+    """Remove completed AIDE worktrees."""
     import subprocess
 
     path = Path(repo_path).resolve()
     worktrees = list_worktrees(path)
-    galaxy_wt = [w for w in worktrees if "galaxy/" in w.get("branch", "")]
+    aide_wt = [w for w in worktrees if "aide/" in w.get("branch", "")]
 
-    if not galaxy_wt:
-        click.echo("No galaxy worktrees found")
+    if not aide_wt:
+        click.echo("No AIDE worktrees found")
         return
 
     removed = 0
-    for wt in galaxy_wt:
+    for wt in aide_wt:
         try:
             subprocess.run(
                 ["git", "worktree", "remove", "--force", wt["path"]],
@@ -2109,7 +2109,7 @@ Expected: all tests pass (48+ passed, 0 failed)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add galaxy/cli.py tests/test_cli.py
+git add aide/cli.py tests/test_cli.py
 git commit -m "feat: Click CLI (init/run/status/clean) with TDD"
 ```
 
@@ -2123,14 +2123,14 @@ git commit -m "feat: Click CLI (init/run/status/clean) with TDD"
 - [ ] **Step 1: Write `README.md`**
 
 ```markdown
-# galaxy
+# AIDE
 
 CAID (Centralized Asynchronous Isolated Delegation) multi-agent AI orchestrator.
 Fans out coding tasks across N Claude Code workers in isolated git worktrees.
 
 ## How It Works
 
-1. `galaxy run "your task"` calls Anthropic API to decompose the task into subtasks
+1. `aide run "your task"` calls Anthropic API to decompose the task into subtasks
 2. Manager assigns each subtask to a Claude Code worker in its own git worktree
 3. Workers run concurrently with no file conflicts
 4. Completed work is test-gated and merged back to main
@@ -2145,14 +2145,14 @@ Fans out coding tasks across N Claude Code workers in isolated git worktrees.
 ## Install
 
 ```bash
-pip install galaxy-caid
+pip install aide
 ```
 
 Or from source:
 
 ```bash
 git clone https://github.com/platfrmrcarl/galaxy.git
-cd galaxy
+cd galaxy  # repo dir unchanged
 pip install -e ".[dev]"
 ```
 
@@ -2166,57 +2166,57 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Usage
 
-### Initialize galaxy for a repository
+### Initialize AIDE for a repository
 
 ```bash
 cd /path/to/your/repo
-galaxy init
+aide init
 ```
 
-Creates `.galaxy/` directory with worktrees, config, and SQLite database.
+Creates `.aide/` directory with worktrees, config, and SQLite database.
 
 ### Run a task
 
 ```bash
 # From a prompt (auto-determines agent count)
-galaxy run "Build a REST API with JWT auth and user management"
+aide run "Build a REST API with JWT auth and user management"
 
 # From a markdown file of tasks
-galaxy run --file tasks.md
+aide run --file tasks.md
 
 # Override agent count
-galaxy run "Fix the auth bug" --agents 3
+aide run "Fix the auth bug" --agents 3
 
 # Specify a custom verify command
-galaxy run "Add user endpoints" --verify "pytest tests/test_users.py"
+aide run "Add user endpoints" --verify "pytest tests/test_users.py"
 
 # Target a different repo
-galaxy run "Build the feature" --repo /path/to/repo
+aide run "Build the feature" --repo /path/to/repo
 ```
 
 ### Check status
 
 ```bash
 # See active worktrees
-galaxy status
+aide status
 
 # See status of a specific run
-galaxy status --run-id abc12345
+aide status --run-id abc12345
 ```
 
 ### Clean up
 
 ```bash
-# Remove all finished galaxy worktrees
-galaxy clean
+# Remove all finished AIDE worktrees
+aide clean
 
 # Target a specific repo
-galaxy clean --repo /path/to/repo
+aide clean --repo /path/to/repo
 ```
 
 ## Agent Count
 
-galaxy auto-determines the number of agents based on task complexity (1–100):
+AIDE auto-determines the number of agents based on task complexity (1–100):
 
 | Complexity | Agents | Example |
 |---|---|---|
@@ -2230,7 +2230,7 @@ Override with `--agents N`.
 
 ## Configuration
 
-`.galaxy/config.json` (created by `galaxy init`):
+`.aide/config.json` (created by `aide init`):
 
 ```json
 {
@@ -2283,25 +2283,25 @@ pytest tests/ -v --tb=short
 
 Expected: all tests pass
 
-- [ ] **Step 3: Verify `galaxy` CLI is available**
+- [ ] **Step 3: Verify `aide` CLI is available**
 
 ```bash
-galaxy --help
+aide --help
 ```
 
 Expected:
 ```
-Usage: galaxy [OPTIONS] COMMAND [ARGS]...
+Usage: aide [OPTIONS] COMMAND [ARGS]...
 
-  galaxy — CAID multi-agent AI orchestrator.
+  aide — CAID multi-agent AI orchestrator.
 
 Options:
   --help  Show this message and exit.
 
 Commands:
-  clean   Remove completed galaxy worktrees.
-  init    Initialize galaxy for a repository.
-  run     Run a task with the galaxy swarm.
+  clean   Remove completed AIDE worktrees.
+  init    Initialize AIDE for a repository.
+  run     Run a task with the AIDE swarm.
   status  Show status of current or specified run.
 ```
 

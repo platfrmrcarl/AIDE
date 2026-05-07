@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: aide
+Version: 0.1.0
+Summary: CAID multi-agent AI orchestrator using git worktrees
+Requires-Python: >=3.11
+Requires-Dist: anthropic>=0.40.0
+Requires-Dist: click>=8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: pytest-mock>=3.12; extra == "dev"

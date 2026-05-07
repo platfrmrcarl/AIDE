@@ -4,39 +4,39 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from galaxy.cli import main
-from galaxy.models import Plan, RunRecord, SubTask
-from galaxy.taskbox import Taskbox
-from galaxy.workspace import init_galaxy
+from aide.cli import main
+from aide.models import Plan, RunRecord, SubTask
+from aide.taskbox import Taskbox
+from aide.workspace import init_aide
 
 
-def test_init_creates_galaxy_dir(runner, git_repo):
-    """galaxy init creates .galaxy/ directory"""
+def test_init_creates_aide_dir(runner, git_repo):
+    """aide init creates .aide/ directory"""
     result = runner.invoke(main, ["init", str(git_repo)])
     assert result.exit_code == 0
-    assert (git_repo / ".galaxy").exists()
+    assert (git_repo / ".aide").exists()
     assert "initialized" in result.output
 
 
 def test_init_already_initialized(runner, git_repo):
-    """galaxy init on already-initialized repo prints 'already initialized'"""
-    init_galaxy(git_repo)
+    """aide init on already-initialized repo prints 'already initialized'"""
+    init_aide(git_repo)
     result = runner.invoke(main, ["init", str(git_repo)])
     assert result.exit_code == 0
     assert "already initialized" in result.output
 
 
 def test_run_requires_prompt_or_file(runner, git_repo):
-    """galaxy run with no args exits 1 with error message"""
-    init_galaxy(git_repo)
+    """aide run with no args exits 1 with error message"""
+    init_aide(git_repo)
     result = runner.invoke(main, ["run", "--repo", str(git_repo)])
     assert result.exit_code == 1
     assert "prompt" in result.output.lower() or "file" in result.output.lower()
 
 
 def test_run_dispatches_plan(runner, git_repo, mocker):
-    """galaxy run calls plan_task and run_manager"""
-    init_galaxy(git_repo)
+    """aide run calls plan_task and run_manager"""
+    init_aide(git_repo)
 
     fake_plan = Plan(
         run_id="r1",
@@ -53,9 +53,9 @@ def test_run_dispatches_plan(runner, git_repo, mocker):
         "total": 1,
     }
 
-    mock_plan = mocker.patch("galaxy.cli.plan_task", return_value=fake_plan)
+    mock_plan = mocker.patch("aide.cli.plan_task", return_value=fake_plan)
     mock_manager = mocker.patch(
-        "galaxy.cli.run_manager",
+        "aide.cli.run_manager",
         new=AsyncMock(return_value=fake_result),
     )
 
@@ -72,17 +72,17 @@ def test_run_dispatches_plan(runner, git_repo, mocker):
 
 
 def test_status_no_runs(runner, git_repo):
-    """galaxy status with no runs prints 'No runs found.'"""
-    init_galaxy(git_repo)
+    """aide status with no runs prints 'No runs found.'"""
+    init_aide(git_repo)
     result = runner.invoke(main, ["status", "--repo", str(git_repo)])
     assert result.exit_code == 0
     assert "No runs found" in result.output
 
 
 def test_status_shows_run(runner, git_repo):
-    """galaxy status shows run info after a run is saved"""
-    init_galaxy(git_repo)
-    taskbox = Taskbox(git_repo / ".galaxy" / "galaxy.db")
+    """aide status shows run info after a run is saved"""
+    init_aide(git_repo)
+    taskbox = Taskbox(git_repo / ".aide" / "aide.db")
     run = RunRecord(
         id="abc123",
         prompt="test prompt",
@@ -100,16 +100,16 @@ def test_status_shows_run(runner, git_repo):
 
 
 def test_clean_removes_worktrees(runner, git_repo, mocker):
-    """galaxy clean calls delete_worktree for each listed worktree"""
-    init_galaxy(git_repo)
+    """aide clean calls delete_worktree for each listed worktree"""
+    init_aide(git_repo)
 
     fake_worktrees = [
-        {"path": "/tmp/wt1", "branch": "galaxy/r1/agent-1"},
-        {"path": "/tmp/wt2", "branch": "galaxy/r1/agent-2"},
+        {"path": "/tmp/wt1", "branch": "aide/r1/agent-1"},
+        {"path": "/tmp/wt2", "branch": "aide/r1/agent-2"},
     ]
 
-    mocker.patch("galaxy.cli.list_worktrees", return_value=fake_worktrees)
-    mock_delete = mocker.patch("galaxy.cli.delete_worktree")
+    mocker.patch("aide.cli.list_worktrees", return_value=fake_worktrees)
+    mock_delete = mocker.patch("aide.cli.delete_worktree")
 
     result = runner.invoke(main, ["clean", "--repo", str(git_repo)])
     assert result.exit_code == 0

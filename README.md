@@ -1,4 +1,4 @@
-# galaxy
+# AIDE
 
 CAID (Centralized Asynchronous Isolated Delegation) multi-agent AI orchestrator. Breaks a coding task into a dependency DAG, spawns Claude Code agents in isolated git worktrees, and integrates the results back to your main branch.
 
@@ -12,7 +12,7 @@ Requires Python 3.11+.
 
 ## Authentication
 
-Galaxy supports two auth modes, configured in `.galaxy/config.json`:
+AIDE supports two auth modes, configured in `.aide/config.json`:
 
 **Option 1 — Anthropic API key (default if key is set):**
 ```bash
@@ -22,7 +22,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 **Option 2 — Claude subscription (no API key needed):**
 Requires the `claude` CLI to be installed and authenticated (`claude` is Claude Code).
 ```bash
-# In .galaxy/config.json:
+# In .aide/config.json:
 { "auth_mode": "claude_cli" }
 ```
 
@@ -33,34 +33,34 @@ Requires the `claude` CLI to be installed and authenticated (`claude` is Claude 
 ```bash
 cd your-repo
 
-# Initialize galaxy (creates .galaxy/ structure)
-galaxy init
+# Initialize AIDE (creates .aide/ structure)
+aide init
 
-# Run a task — galaxy auto-determines agent count
-galaxy run "Add input validation to all API endpoints"
+# Run a task — AIDE auto-determines agent count
+aide run "Add input validation to all API endpoints"
 
 # Specify agent count explicitly
-galaxy run "Refactor auth module" --agents 5
+aide run "Refactor auth module" --agents 5
 
 # Run from a markdown task file
-galaxy run --file tasks.md
+aide run --file tasks.md
 
 # Check run status
-galaxy status
+aide status
 
 # Clean up finished worktrees
-galaxy clean
+aide clean
 ```
 
 ## Commands
 
-### `galaxy init [REPO_PATH]`
+### `aide init [REPO_PATH]`
 
-Creates the `.galaxy/` workspace structure inside a git repository.
+Creates the `.aide/` workspace structure inside a git repository.
 
 ```
-.galaxy/
-  galaxy.db       # SQLite message bus
+.aide/
+  aide.db       # SQLite message bus
   config.json     # Configuration
   worktrees/      # Agent workspaces (created at runtime)
   runs/           # Run logs
@@ -68,7 +68,7 @@ Creates the `.galaxy/` workspace structure inside a git repository.
 
 Defaults to the current directory. Safe to run multiple times.
 
-### `galaxy run PROMPT [OPTIONS]`
+### `aide run PROMPT [OPTIONS]`
 
 Decomposes the prompt into a subtask DAG using Claude, then fans out to N agents each in an isolated git worktree.
 
@@ -89,7 +89,7 @@ Agent count is auto-determined from task complexity (1–100 score):
 | 61–80 | 20–50 |
 | 81–100 | 50–100 |
 
-### `galaxy status [OPTIONS]`
+### `aide status [OPTIONS]`
 
 Shows the last 5 runs and their statuses.
 
@@ -98,7 +98,7 @@ Shows the last 5 runs and their statuses.
 | `--repo PATH` | Target repository (default: `.`) |
 | `--run-id ID` | Show tasks for a specific run |
 
-### `galaxy clean [OPTIONS]`
+### `aide clean [OPTIONS]`
 
 Removes all finished worktrees.
 
@@ -109,7 +109,7 @@ Removes all finished worktrees.
 
 ## Configuration
 
-`.galaxy/config.json` is created by `galaxy init` and can be edited:
+`.aide/config.json` is created by `aide init` and can be edited:
 
 ```json
 {
@@ -137,10 +137,10 @@ Removes all finished worktrees.
 
 1. **Plan** — The Anthropic API decomposes your prompt into a directed acyclic graph (DAG) of subtasks with dependency ordering.
 2. **Dispatch** — The manager fans out each wave of dependency-free tasks to worker agents.
-3. **Isolate** — Each agent gets a fresh `git worktree` on a dedicated branch (`galaxy/<run-id>/<agent-id>`), so no two agents touch the same working tree.
+3. **Isolate** — Each agent gets a fresh `git worktree` on a dedicated branch (`aide/<run-id>/<agent-id>`), so no two agents touch the same working tree.
 4. **Execute** — Workers write a `TASK.md` to their worktree and spawn `claude --print` as a subprocess.
 5. **Integrate** — On completion, the verify command runs, and passing branches are merged back. Dependent tasks are unlocked.
-6. **Report** — `galaxy status` shows per-run and per-task outcomes.
+6. **Report** — `aide status` shows per-run and per-task outcomes.
 
 ## Development
 

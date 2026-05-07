@@ -2,18 +2,18 @@ import json
 import subprocess
 from pathlib import Path
 
-_GALAXY_DIR = ".galaxy"
+_AIDE_DIR = ".aide"
 
 
 def is_initialized(repo_path: Path) -> bool:
-    return (repo_path / _GALAXY_DIR).exists()
+    return (repo_path / _AIDE_DIR).exists()
 
 
-def init_galaxy(repo_path: Path) -> Path:
-    galaxy_dir = repo_path / _GALAXY_DIR
-    (galaxy_dir / "worktrees").mkdir(parents=True, exist_ok=True)
-    (galaxy_dir / "runs").mkdir(parents=True, exist_ok=True)
-    config_path = galaxy_dir / "config.json"
+def init_aide(repo_path: Path) -> Path:
+    aide_dir = repo_path / _AIDE_DIR
+    (aide_dir / "worktrees").mkdir(parents=True, exist_ok=True)
+    (aide_dir / "runs").mkdir(parents=True, exist_ok=True)
+    config_path = aide_dir / "config.json"
     if not config_path.exists():
         config_path.write_text(
             json.dumps(
@@ -29,19 +29,19 @@ def init_galaxy(repo_path: Path) -> Path:
                 indent=2,
             )
         )
-    return galaxy_dir
+    return aide_dir
 
 
 def get_config(repo_path: Path) -> dict:
-    config_path = repo_path / _GALAXY_DIR / "config.json"
+    config_path = repo_path / _AIDE_DIR / "config.json"
     if config_path.exists():
         return json.loads(config_path.read_text())
     return {}
 
 
 def create_worktree(repo_path: Path, run_id: str, agent_id: str) -> tuple[Path, str]:
-    branch = f"galaxy/{run_id}/{agent_id}"
-    worktree_path = repo_path / _GALAXY_DIR / "worktrees" / agent_id
+    branch = f"aide/{run_id}/{agent_id}"
+    worktree_path = repo_path / _AIDE_DIR / "worktrees" / agent_id
     subprocess.run(
         ["git", "worktree", "add", "-b", branch, str(worktree_path)],
         cwd=repo_path,

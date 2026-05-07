@@ -1,8 +1,8 @@
 import json
 import pytest
 from unittest.mock import MagicMock, patch
-from galaxy.models import Plan, SubTask
-from galaxy.planner import compute_agent_count, plan_task
+from aide.models import Plan, SubTask
+from aide.planner import compute_agent_count, plan_task
 
 MOCK_API_RESPONSE = json.dumps({
     "complexity_score": 25,
@@ -49,7 +49,7 @@ def test_compute_agent_count_very_large():
 
 
 def test_plan_task_returns_plan():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API")
 
     assert isinstance(plan, Plan)
@@ -60,7 +60,7 @@ def test_plan_task_returns_plan():
 
 
 def test_plan_task_agent_count_override():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API", agent_count_override=42)
 
     assert plan.agent_count == 42
@@ -68,14 +68,14 @@ def test_plan_task_agent_count_override():
 
 def test_plan_task_handles_json_in_code_block():
     wrapped = f"```json\n{MOCK_API_RESPONSE}\n```"
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(wrapped)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(wrapped)):
         plan = plan_task("Build a REST API")
 
     assert len(plan.tasks) == 3
 
 
 def test_plan_task_subtask_types():
-    with patch("galaxy.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
+    with patch("aide.planner.Anthropic", return_value=_mock_anthropic(MOCK_API_RESPONSE)):
         plan = plan_task("Build a REST API")
 
     for task in plan.tasks:
@@ -100,8 +100,8 @@ def _make_mock_plan():
 def test_plan_task_uses_cli_when_no_api_key(mocker):
     """When auth_mode=claude_cli, uses subprocess not Anthropic SDK."""
     mock_plan = _make_mock_plan()
-    mocker.patch("galaxy.planner.asyncio.run", return_value=mock_plan)
-    mock_anthropic_cls = mocker.patch("galaxy.planner.Anthropic")
+    mocker.patch("aide.planner.asyncio.run", return_value=mock_plan)
+    mock_anthropic_cls = mocker.patch("aide.planner.Anthropic")
 
     plan = plan_task("Build a REST API", auth_mode="claude_cli")
 
@@ -114,8 +114,8 @@ def test_plan_task_auto_falls_back_to_cli(mocker, monkeypatch):
     """auth_mode=auto with no ANTHROPIC_API_KEY falls back to CLI."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     mock_plan = _make_mock_plan()
-    mocker.patch("galaxy.planner.asyncio.run", return_value=mock_plan)
-    mock_anthropic_cls = mocker.patch("galaxy.planner.Anthropic")
+    mocker.patch("aide.planner.asyncio.run", return_value=mock_plan)
+    mock_anthropic_cls = mocker.patch("aide.planner.Anthropic")
 
     plan = plan_task("Build a REST API", auth_mode="auto")
 
