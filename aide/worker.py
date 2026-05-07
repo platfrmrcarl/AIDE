@@ -7,7 +7,7 @@ from .models import Message
 from .taskbox import Taskbox
 from .providers import detect_worker_cmd
 
-_TASK_TEMPLATE = """\
+_GIT_TASK_TEMPLATE = """\
 # Agent Task
 
 {description}
@@ -17,6 +17,22 @@ _TASK_TEMPLATE = """\
 - Run tests to verify your work
 - Commit when done: git add -A && git commit -m "feat: {short_desc}"
 - Do NOT push
+
+## Context
+- Run ID: {run_id}
+- Agent ID: {agent_id}
+"""
+
+_BARE_TASK_TEMPLATE = """\
+# Agent Task
+
+{description}
+
+## Instructions
+- Work only within this directory
+- Write any file output to this directory
+- If the task produces text (names, copy, analysis), write it to OUTPUT.md
+- Do NOT use git
 
 ## Context
 - Run ID: {run_id}
@@ -33,6 +49,7 @@ async def run_worker(
     taskbox: Taskbox,
     timeout: int = 120,
     worker_cmd: str = "auto",
+    mode: str = "git",
 ) -> None:
     cmd = worker_cmd if worker_cmd != "auto" else detect_worker_cmd()
     if cmd is None:
@@ -53,8 +70,9 @@ async def run_worker(
         return
 
     short_desc = task_description[:50].replace("\n", " ")
+    template = _BARE_TASK_TEMPLATE if mode == "bare" else _GIT_TASK_TEMPLATE
     (worktree_path / "TASK.md").write_text(
-        _TASK_TEMPLATE.format(
+        template.format(
             description=task_description,
             run_id=run_id,
             agent_id=agent_id,

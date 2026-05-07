@@ -102,3 +102,33 @@ async def test_worker_auto_cmd_errors_when_no_cli_found(db, tmp_path, mocker):
     error_msgs = [m for m in messages if m.type == "ERROR"]
     assert len(error_msgs) == 1
     assert "worker CLI" in error_msgs[0].payload.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_worker_bare_mode_writes_bare_template(db, tmp_path):
+    make_agent(db, tmp_path)
+    await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Generate three business names for a coffee shop",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true",
+        mode="bare",
+    )
+    content = (tmp_path / "TASK.md").read_text()
+    assert "OUTPUT.md" in content
+    assert "git commit" not in content
+
+
+@pytest.mark.asyncio
+async def test_worker_git_mode_writes_git_template(db, tmp_path):
+    make_agent(db, tmp_path)
+    await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Add input validation",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true",
+        mode="git",
+    )
+    content = (tmp_path / "TASK.md").read_text()
+    assert "git commit" in content
+    assert "OUTPUT.md" not in content
