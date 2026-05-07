@@ -90,3 +90,103 @@ def test_init_aide_config_has_provider_fields(git_repo):
     assert config["worker_cmd"] == "auto"
     assert "anthropic_model" not in config
     assert "claude_cmd" not in config
+
+
+import shutil
+from aide.workspace import (
+    BareWorkspace,
+    GitWorkspace,
+    workspace_factory,
+)
+
+
+# ── BareWorkspace ─────────────────────────────────────────────────────────────
+
+def test_bare_workspace_create_slot_makes_dir(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    slot_path, slot_id = ws.create_slot("run1", "agent-abc")
+    assert slot_path.exists()
+    assert slot_path == tmp_path / "run1" / "agent-abc"
+    assert len(slot_id) == 8
+
+
+def test_bare_workspace_integrate_no_verify_succeeds(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    slot_path, slot_id = ws.create_slot("run1", "agent-abc")
+    ok, msg = ws.integrate(slot_path, slot_id, verify_cmd=None)
+    assert ok is True
+    assert str(slot_path) in msg
+
+
+def test_bare_workspace_integrate_verify_passes(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    slot_path, slot_id = ws.create_slot("run1", "agent-abc")
+    ok, msg = ws.integrate(slot_path, slot_id, verify_cmd="true")
+    assert ok is True
+
+
+def test_bare_workspace_integrate_verify_fails(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    slot_path, slot_id = ws.create_slot("run1", "agent-abc")
+    ok, msg = ws.integrate(slot_path, slot_id, verify_cmd="false")
+    assert ok is False
+    assert "verify failed" in msg
+
+
+def test_bare_workspace_cleanup_slot_is_noop(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    slot_path, slot_id = ws.create_slot("run1", "agent-abc")
+    ws.cleanup_slot(slot_path, slot_id)
+    assert slot_path.exists()
+
+
+def test_bare_workspace_list_slots(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    ws.create_slot("run1", "agent-abc")
+    ws.create_slot("run1", "agent-def")
+    slots = ws.list_slots()
+    assert len(slots) >= 1
+    assert all("path" in s for s in slots)
+
+
+def test_bare_workspace_mode_attribute(tmp_path):
+    ws = BareWorkspace(tmp_path)
+    assert ws.mode == "bare"
+
+
+def test_git_workspace_mode_attribute(git_repo):
+    ws = GitWorkspace(git_repo)
+    assert ws.mode == "git"
+
+
+# ── workspace_factory ─────────────────────────────────────────────────────────
+
+def test_workspace_factory_returns_git_workspace(git_repo):
+    ws = workspace_factory({"mode": "git"}, git_repo)
+    assert isinstance(ws, GitWorkspace)
+
+
+def test_workspace_factory_returns_bare_workspace(tmp_path):
+    ws = workspace_factory({"mode": "bare"}, tmp_path)
+    assert isinstance(ws, BareWorkspace)
+
+
+def test_workspace_factory_auto_detects_git(git_repo):
+    ws = workspace_factory({"mode": "auto"}, git_repo)
+    assert isinstance(ws, GitWorkspace)
+
+
+def test_workspace_factory_auto_detects_no_git(tmp_path):
+    ws = workspace_factory({"mode": "auto"}, tmp_path)
+    assert isinstance(ws, BareWorkspace)
+
+
+def test_workspace_factory_git_mode_raises_outside_repo(tmp_path):
+    with pytest.raises(ValueError, match="Not a git repository"):
+        workspace_factory({"mode": "git"}, tmp_path)
+
+
+def test_init_aide_config_has_mode_field(tmp_path):
+    init_aide(tmp_path)
+    config = get_config(tmp_path)
+    assert config["mode"] == "auto"
