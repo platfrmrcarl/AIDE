@@ -62,6 +62,8 @@ def run(prompt, task_file, repo, agents, verify_cmd):
         prompt,
         model=config.get("anthropic_model", "claude-opus-4-7"),
         agent_count_override=agents,
+        auth_mode=config.get("auth_mode", "auto"),
+        claude_cmd=config.get("claude_cmd", "claude"),
     )
 
     taskbox = Taskbox(repo_path / ".galaxy" / "galaxy.db")

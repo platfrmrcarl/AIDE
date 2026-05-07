@@ -23,6 +23,8 @@ def init_galaxy(repo_path: Path) -> Path:
                     "worker_timeout_seconds": 120,
                     "anthropic_model": "claude-opus-4-7",
                     "max_concurrent_workers": 20,
+                    "auth_mode": "auto",
+                    "claude_cmd": "claude",
                 },
                 indent=2,
             )

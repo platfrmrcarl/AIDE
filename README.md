@@ -8,11 +8,25 @@ CAID (Centralized Asynchronous Isolated Delegation) multi-agent AI orchestrator.
 pip install -e .
 ```
 
-Requires Python 3.11+ and the `ANTHROPIC_API_KEY` environment variable.
+Requires Python 3.11+.
 
+## Authentication
+
+Galaxy supports two auth modes, configured in `.galaxy/config.json`:
+
+**Option 1 — Anthropic API key (default if key is set):**
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+**Option 2 — Claude subscription (no API key needed):**
+Requires the `claude` CLI to be installed and authenticated (`claude` is Claude Code).
+```bash
+# In .galaxy/config.json:
+{ "auth_mode": "claude_cli" }
+```
+
+**Auto mode (default):** Uses API key if `ANTHROPIC_API_KEY` is set, otherwise falls back to the `claude` CLI.
 
 ## Quick start
 

@@ -81,3 +81,44 @@ def test_plan_task_subtask_types():
     for task in plan.tasks:
         assert isinstance(task, SubTask)
         assert task.status == "pending"
+
+
+def _make_mock_plan():
+    return Plan(
+        run_id="test1234",
+        original_prompt="Build a REST API",
+        agent_count=6,
+        complexity_score=25,
+        tasks=[
+            SubTask(id="t1", description="Set up project structure", depends_on=[]),
+            SubTask(id="t2", description="Implement auth module", depends_on=["t1"]),
+            SubTask(id="t3", description="Write tests", depends_on=["t2"]),
+        ],
+    )
+
+
+def test_plan_task_uses_cli_when_no_api_key(mocker):
+    """When auth_mode=claude_cli, uses subprocess not Anthropic SDK."""
+    mock_plan = _make_mock_plan()
+    mocker.patch("galaxy.planner.asyncio.run", return_value=mock_plan)
+    mock_anthropic_cls = mocker.patch("galaxy.planner.Anthropic")
+
+    plan = plan_task("Build a REST API", auth_mode="claude_cli")
+
+    assert isinstance(plan, Plan)
+    assert len(plan.tasks) == 3
+    mock_anthropic_cls.assert_not_called()
+
+
+def test_plan_task_auto_falls_back_to_cli(mocker, monkeypatch):
+    """auth_mode=auto with no ANTHROPIC_API_KEY falls back to CLI."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    mock_plan = _make_mock_plan()
+    mocker.patch("galaxy.planner.asyncio.run", return_value=mock_plan)
+    mock_anthropic_cls = mocker.patch("galaxy.planner.Anthropic")
+
+    plan = plan_task("Build a REST API", auth_mode="auto")
+
+    assert isinstance(plan, Plan)
+    assert len(plan.tasks) == 3
+    mock_anthropic_cls.assert_not_called()

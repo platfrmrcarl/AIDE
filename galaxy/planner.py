@@ -1,4 +1,6 @@
+import asyncio
 import json
+import os
 import re
 import uuid
 
@@ -16,7 +18,7 @@ Agent count guidelines:
 - Score 61-80: 20-50 agents (multi-module feature)
 - Score 81-100: 50-100 agents (full project)
 
-Respond ONLY with valid JSON:
+Respond ONLY with valid JSON (no preamble, no explanation, no code fences):
 {
   "complexity_score": <int 1-100>,
   "agent_count": <int>,
@@ -45,22 +47,18 @@ def compute_agent_count(complexity_score: int) -> int:
     return max(50, complexity_score)
 
 
-def plan_task(
-    prompt: str,
-    model: str = "claude-opus-4-7",
-    agent_count_override: int | None = None,
-) -> Plan:
-    client = Anthropic()
-    run_id = str(uuid.uuid4())[:8]
-
-    response = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        system=_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": f"Task: {prompt}"}],
+def _build_planning_prompt(prompt: str, agent_count_override: int | None) -> str:
+    override_note = (
+        f"\n\nNote: Use agent_count={agent_count_override} in your response."
+        if agent_count_override is not None
+        else ""
     )
+    return f"Task: {prompt}{override_note}"
 
-    raw = response.content[0].text.strip()
+
+def _parse_plan_response(raw: str, prompt: str, agent_count_override: int | None) -> Plan:
+    run_id = str(uuid.uuid4())[:8]
+    raw = raw.strip()
     match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", raw)
     if match:
         raw = match.group(1)
@@ -85,3 +83,49 @@ def plan_task(
         complexity_score=data["complexity_score"],
         tasks=tasks,
     )
+
+
+async def _plan_via_cli(prompt: str, claude_cmd: str, agent_count_override: int | None) -> Plan:
+    planning_prompt = _build_planning_prompt(prompt, agent_count_override)
+    proc = await asyncio.create_subprocess_exec(
+        claude_cmd, "--print", planning_prompt,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+    raw = stdout.decode()
+    return _parse_plan_response(raw, prompt, agent_count_override)
+
+
+def plan_task(
+    prompt: str,
+    model: str = "claude-opus-4-7",
+    agent_count_override: int | None = None,
+    auth_mode: str = "api_key",   # "auto" | "api_key" | "claude_cli"
+    claude_cmd: str = "claude",
+) -> Plan:
+    use_cli = False
+
+    if auth_mode == "claude_cli":
+        use_cli = True
+    elif auth_mode == "api_key":
+        use_cli = False
+    else:  # auto
+        use_cli = not bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+    if use_cli:
+        return asyncio.run(_plan_via_cli(prompt, claude_cmd, agent_count_override))
+
+    # API key path
+    client = Anthropic()
+    run_id = str(uuid.uuid4())[:8]
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=4096,
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": _build_planning_prompt(prompt, agent_count_override)}],
+    )
+
+    raw = response.content[0].text.strip()
+    return _parse_plan_response(raw, prompt, agent_count_override)
