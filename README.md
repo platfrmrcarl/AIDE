@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="AIDE" width="200" />
+</p>
+
 # AIDE
 
 CAID (Centralized Asynchronous Isolated Delegation) multi-agent AI orchestrator. Give AIDE a coding task; it decomposes it into a dependency DAG, fans out to N AI agents each in an isolated git worktree, and integrates every branch back into your main branch automatically.
