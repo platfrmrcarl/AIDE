@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .models import Message
 from .taskbox import Taskbox
+from .providers import detect_worker_cmd
 
 _TASK_TEMPLATE = """\
 # Agent Task
@@ -31,8 +32,26 @@ async def run_worker(
     worktree_path: Path,
     taskbox: Taskbox,
     timeout: int = 120,
-    claude_cmd: str = "claude",
+    worker_cmd: str = "auto",
 ) -> None:
+    cmd = worker_cmd if worker_cmd != "auto" else detect_worker_cmd()
+    if cmd is None:
+        taskbox.send_message(
+            Message(
+                id=str(uuid.uuid4()),
+                type="ERROR",
+                from_agent=agent_id,
+                to_agent="manager",
+                payload={
+                    "task_id": task_id,
+                    "error": "No worker CLI found. Install claude, codex, or gemini.",
+                },
+                created_at=datetime.utcnow(),
+            )
+        )
+        taskbox.update_agent_status(agent_id, "failed")
+        return
+
     short_desc = task_description[:50].replace("\n", " ")
     (worktree_path / "TASK.md").write_text(
         _TASK_TEMPLATE.format(
@@ -47,7 +66,7 @@ async def run_worker(
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            claude_cmd,
+            cmd,
             "--print",
             "Please complete the task described in TASK.md",
             cwd=worktree_path,

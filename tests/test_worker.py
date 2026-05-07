@@ -21,7 +21,7 @@ async def test_worker_sends_complete_on_success(db, tmp_path):
         agent_id="a1", run_id="r1", task_id="t1",
         task_description="Do the thing",
         worktree_path=tmp_path, taskbox=db,
-        timeout=10, claude_cmd="true",
+        timeout=10, worker_cmd="true",
     )
     messages = db.get_unprocessed_messages("manager")
     assert any(m.type == "COMPLETE" for m in messages)
@@ -34,7 +34,7 @@ async def test_worker_sends_error_on_failure(db, tmp_path):
         agent_id="a1", run_id="r1", task_id="t1",
         task_description="Do the thing",
         worktree_path=tmp_path, taskbox=db,
-        timeout=10, claude_cmd="false",
+        timeout=10, worker_cmd="false",
     )
     messages = db.get_unprocessed_messages("manager")
     assert any(m.type == "ERROR" for m in messages)
@@ -47,7 +47,7 @@ async def test_worker_writes_task_md(db, tmp_path):
         agent_id="a1", run_id="r1", task_id="t1",
         task_description="Build the auth module",
         worktree_path=tmp_path, taskbox=db,
-        timeout=10, claude_cmd="true",
+        timeout=10, worker_cmd="true",
     )
     task_md = tmp_path / "TASK.md"
     assert task_md.exists()
@@ -68,7 +68,7 @@ async def test_worker_timeout_sends_error(db, tmp_path):
         agent_id="a1", run_id="r1", task_id="t1",
         task_description="Do the thing",
         worktree_path=tmp_path, taskbox=db,
-        timeout=1, claude_cmd=str(script),
+        timeout=1, worker_cmd=str(script),
     )
     messages = db.get_unprocessed_messages("manager")
     assert any(m.type == "ERROR" for m in messages)
@@ -81,7 +81,24 @@ async def test_worker_updates_agent_status_to_working(db, tmp_path):
         agent_id="a1", run_id="r1", task_id="t1",
         task_description="Do the thing",
         worktree_path=tmp_path, taskbox=db,
-        timeout=10, claude_cmd="true",
+        timeout=10, worker_cmd="true",
     )
     agents = db.get_agents("r1")
     assert agents[0].status in ("done", "failed")
+
+
+@pytest.mark.asyncio
+async def test_worker_auto_cmd_errors_when_no_cli_found(db, tmp_path, mocker):
+    """worker_cmd='auto' with no CLI installed sends ERROR message."""
+    mocker.patch("aide.worker.detect_worker_cmd", return_value=None)
+    make_agent(db, tmp_path)
+    await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="auto",
+    )
+    messages = db.get_unprocessed_messages("manager")
+    error_msgs = [m for m in messages if m.type == "ERROR"]
+    assert len(error_msgs) == 1
+    assert "worker CLI" in error_msgs[0].payload.get("error", "")
