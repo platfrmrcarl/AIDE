@@ -113,11 +113,13 @@ Removes all finished worktrees.
 
 ```json
 {
-  "verify_command": "pytest",
+  "verify_command": null,
   "default_agent_count": null,
   "worker_timeout_seconds": 120,
   "anthropic_model": "claude-opus-4-7",
-  "max_concurrent_workers": 20
+  "max_concurrent_workers": 20,
+  "auth_mode": "auto",
+  "claude_cmd": "claude"
 }
 ```
 
@@ -126,8 +128,10 @@ Removes all finished worktrees.
 | `verify_command` | `null` | Run before merging each agent branch. Auto-detected if null (`pytest`, `npm test`, `make test`). |
 | `default_agent_count` | `null` | Override auto-computed count for all runs. |
 | `worker_timeout_seconds` | `120` | Kill agent after this many seconds of inactivity. |
-| `anthropic_model` | `claude-opus-4-7` | Model used for task decomposition. |
+| `anthropic_model` | `claude-opus-4-7` | Model used for task decomposition (API key mode only). |
 | `max_concurrent_workers` | `20` | Max agents running simultaneously. |
+| `auth_mode` | `"auto"` | `"auto"` \| `"api_key"` \| `"claude_cli"` |
+| `claude_cmd` | `"claude"` | Path to the `claude` CLI binary. |
 
 ## How it works
 
