@@ -143,10 +143,13 @@ def test_bare_workspace_cleanup_slot_is_noop(tmp_path):
 def test_bare_workspace_list_slots(tmp_path):
     ws = BareWorkspace(tmp_path)
     ws.create_slot("run1", "agent-abc")
-    ws.create_slot("run1", "agent-def")
+    ws.create_slot("run2", "agent-def")
     slots = ws.list_slots()
-    assert len(slots) >= 1
-    assert all("path" in s for s in slots)
+    paths = [s["path"] for s in slots]
+    assert len(slots) == 2
+    assert any("run1" in p for p in paths)
+    assert any("run2" in p for p in paths)
+    assert all("slot_id" in s for s in slots)
 
 
 def test_bare_workspace_mode_attribute(tmp_path):
@@ -178,6 +181,11 @@ def test_workspace_factory_auto_detects_git(git_repo):
 
 def test_workspace_factory_auto_detects_no_git(tmp_path):
     ws = workspace_factory({"mode": "auto"}, tmp_path)
+    assert isinstance(ws, BareWorkspace)
+
+
+def test_workspace_factory_defaults_to_auto_when_no_mode_key(tmp_path):
+    ws = workspace_factory({}, tmp_path)
     assert isinstance(ws, BareWorkspace)
 
 
