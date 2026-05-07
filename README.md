@@ -1,42 +1,60 @@
 <p align="center">
-  <img src="logo.png" alt="AIDE" width="200" />
+  <img src="logo.png" alt="AIDE" width="320" />
 </p>
 
-# AIDE
+<h1 align="center">AIDE</h1>
+<p align="center"><em>Centralized Asynchronous Isolated Delegation — multi-agent AI orchestrator</em></p>
 
-CAID (Centralized Asynchronous Isolated Delegation) multi-agent AI orchestrator. Give AIDE a coding task; it decomposes it into a dependency DAG, fans out to N AI agents each in an isolated git worktree, and integrates every branch back into your main branch automatically.
+---
+
+Give AIDE a task. It decomposes it into a dependency DAG, fans out to N AI agents working in parallel, and integrates their results automatically. Works in git repos, plain directories, or embedded inside your own application.
 
 ---
 
 ## Table of Contents
 
+- [What AIDE Does](#what-aide-does)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
-- [Authentication](#authentication)
+- [Setting Up Your LLM](#setting-up-your-llm)
+- [Workspace Modes](#workspace-modes)
+  - [Git Mode — coding in a repository](#git-mode--coding-in-a-repository)
+  - [Bare Mode — any task, no git required](#bare-mode--any-task-no-git-required)
 - [Quick Start](#quick-start)
-- [Usage](#usage)
+- [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
+- [Using AIDE as a Library](#using-aide-as-a-library)
+- [Recipes](#recipes)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
 - [Development](#development)
 
 ---
 
+## What AIDE Does
+
+AIDE splits a large task into parallel subtasks and runs each one on a real AI agent — Claude, GPT-4o, or Gemini — in an isolated workspace. Results are verified and merged (git mode) or collected into output directories (bare mode).
+
+**Use it for:**
+- Refactoring a codebase across many files simultaneously
+- Generating content, copy, or analysis from multiple angles at once
+- Research tasks that can be parallelized across agents
+- Any work that benefits from N agents working concurrently without stepping on each other
+
+---
+
 ## Prerequisites
 
 - Python 3.11+
-- Git
-- At least one agentic CLI or API key:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — free with Claude subscription
-  - [OpenAI Codex CLI](https://github.com/openai/codex) (`codex`) — requires OpenAI account
-  - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) — free with Google account
-  - Or an API key for Anthropic, OpenAI, Google, or Perplexity
+- At least one of:
+  - A Claude, OpenAI, Google, or Perplexity **API key**
+  - A **subscription CLI** — `claude` (Claude subscription) or `gemini` (free Google account)
+
+Git is only required for git mode. Bare mode works anywhere.
 
 ---
 
 ## Install
-
-### From source
 
 ```bash
 git clone https://github.com/platfrmrcarl/AIDE.git
@@ -44,138 +62,226 @@ cd AIDE
 pip install -e .
 ```
 
-### With optional provider support
+**With extra provider support:**
 
 ```bash
-# Anthropic is included by default. For other providers:
-pip install -e '.[openai]'      # OpenAI / ChatGPT
-pip install -e '.[google]'      # Google Gemini
-pip install -e '.[all]'         # All providers
-pip install -e '.[dev]'         # Development dependencies (pytest, etc.)
+pip install -e '.[openai]'   # OpenAI / ChatGPT
+pip install -e '.[google]'   # Google Gemini
+pip install -e '.[all]'      # All providers
+pip install -e '.[dev]'      # Dev dependencies (pytest, etc.)
 ```
+
+Anthropic is included by default — no extra needed for Claude.
 
 ---
 
-## Authentication
+## Setting Up Your LLM
 
-AIDE uses one provider for **planning** (decomposing tasks into a DAG) and any available agentic CLI for **execution** (running each subtask).
+AIDE uses one LLM for **planning** (decomposing your task into a DAG) and one or more **worker CLIs** for execution (running each agent subprocess).
 
-### Planning providers
+### Planning provider
 
-| Provider | `provider` value | Install extra | API key env var | Subscription CLI |
-|----------|-----------------|---------------|-----------------|-----------------|
-| Anthropic (Claude) | `anthropic` | *(included)* | `ANTHROPIC_API_KEY` | `claude` ✓ |
-| OpenAI (ChatGPT) | `openai` | `aide[openai]` | `OPENAI_API_KEY` | ✗ |
-| Google (Gemini) | `google` | `aide[google]` | `GEMINI_API_KEY` | `gemini` ✓ |
-| Perplexity | `perplexity` | *(included)* | `PERPLEXITY_API_KEY` | ✗ |
+Choose how AIDE calls the planning LLM:
 
-### Auth modes
+| Provider | Install extra | API key env var | Subscription CLI |
+|----------|---------------|-----------------|-----------------|
+| Anthropic (Claude) | *(included)* | `ANTHROPIC_API_KEY` | `claude` |
+| OpenAI (GPT-4o) | `aide[openai]` | `OPENAI_API_KEY` | — |
+| Google (Gemini) | `aide[google]` | `GEMINI_API_KEY` | `gemini` |
+| Perplexity | *(included)* | `PERPLEXITY_API_KEY` | — |
 
-| Mode | Behavior |
-|------|----------|
-| `auto` *(default)* | Use API key if env var is set; fall back to subscription CLI otherwise |
-| `api_key` | Always use the SDK — error if key not set |
-| `subscription` | Always use the provider's CLI — Anthropic and Google only |
-
-### Option 1 — API key
-
-Set the env var for your chosen provider:
+#### Option A — API key
 
 ```bash
-# Anthropic
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# OpenAI
-export OPENAI_API_KEY=sk-...
-
-# Google
-export GEMINI_API_KEY=...
-
-# Perplexity
-export PERPLEXITY_API_KEY=pplx-...
+export ANTHROPIC_API_KEY=sk-ant-...   # Claude
+export OPENAI_API_KEY=sk-...          # ChatGPT
+export GEMINI_API_KEY=...             # Gemini
+export PERPLEXITY_API_KEY=pplx-...   # Perplexity
 ```
 
-### Option 2 — Subscription CLI (no API key needed)
-
-Install and authenticate the CLI for your provider, then AIDE will use it automatically:
+#### Option B — Subscription CLI (no API key needed)
 
 ```bash
-# Claude (Anthropic) — requires Claude subscription
+# Claude — requires Claude subscription
 npm install -g @anthropic-ai/claude-code
 claude login
 
-# Gemini CLI (Google) — free with Google account
+# Gemini — free with Google account
 npm install -g @google/gemini-cli
 gemini auth
 ```
 
-Set `auth_mode: "subscription"` in `.aide/config.json` to force CLI mode.
+AIDE auto-detects the API key or CLI. Set `auth_mode` explicitly if needed:
 
-### Worker CLI (code execution)
+```json
+{ "auth_mode": "api_key" }        // always use API key
+{ "auth_mode": "subscription" }   // always use CLI
+{ "auth_mode": "auto" }           // key if set, else CLI (default)
+```
 
-Worker agents auto-detect the best available agentic CLI: `claude` → `codex` → `gemini` (first one found wins). Override with `"worker_cmd": "claude"` in `.aide/config.json`.
+### Worker CLI (agent execution)
+
+Workers are the subprocesses that actually complete each subtask. AIDE detects `claude` → `codex` → `gemini` in that order. Pin one with:
+
+```json
+{ "worker_cmd": "claude" }
+```
+
+Workers need their own auth. If you use `claude` as the worker, `claude login` must have been run. If you use API key mode for planning, the same or a different worker CLI still needs to be available on PATH.
+
+---
+
+## Workspace Modes
+
+AIDE supports two workspace modes controlled by the `mode` config key.
+
+### Git Mode — coding in a repository
+
+In git mode, each agent gets an isolated **git worktree** on its own branch. When the agent commits its work, AIDE runs your verify command and merges the branch back into your working tree.
+
+```
+mode: "git"   — force git mode (error if not in a git repo)
+mode: "auto"  — use git mode if in a git repo, bare mode otherwise (default)
+```
+
+**Setup for a git repo:**
+
+```bash
+cd your-project          # must be a git repo
+aide init                # interactive setup
+aide run "Add caching layer to the database module"
+```
+
+`aide init` will ask for provider, model, auth mode, and workspace mode. It writes `.aide/config.json` and creates `.aide/` (add to `.gitignore`).
+
+Each agent works on branch `aide/<run-id>/<agent-id>`. When done, AIDE runs your verify command (`pytest`, `npm test`, etc.) and merges passing branches. Failed agents leave their branches for you to inspect.
+
+**Set a verify command:**
+
+```bash
+aide run "Migrate all fetch calls to axios" --verify "npm test"
+```
+
+Or persist it in config:
+
+```json
+{ "verify_command": "pytest tests/" }
+```
+
+**.gitignore recommendation:**
+
+```
+.aide/
+```
+
+### Bare Mode — any task, no git required
+
+In bare mode, each agent gets a **temp directory** under `.aide/runs/<run-id>/<agent-id>/`. No git ops. Output is preserved until you run `aide clean`.
+
+```
+mode: "bare"  — force bare mode
+mode: "auto"  — auto-selected when outside a git repo (default)
+```
+
+**Run without a git repo:**
+
+```bash
+mkdir my-project && cd my-project
+aide run "Write five product descriptions for a standing desk"
+```
+
+No `aide init` needed — AIDE auto-inits with defaults on first run.
+
+**Specify a custom output directory:**
+
+```bash
+aide run "Research competitor pricing strategies" --output ./research-output
+```
+
+**Results are printed at the end:**
+
+```
+Run abc123: complete (3/3 tasks)
+  → .aide/runs/abc123/agent-xyz/
+  → .aide/runs/abc123/agent-abc/
+  → .aide/runs/abc123/agent-def/
+```
+
+Each agent writes its output to its directory. Text output goes to `OUTPUT.md` by convention.
+
+**Clean up:**
+
+```bash
+aide clean    # removes all run directories
+```
 
 ---
 
 ## Quick Start
 
-### 1. Initialize AIDE in your repo
+### Git repo — coding task
 
 ```bash
 cd your-repo
 aide init
-```
-
-Interactive setup — choose provider, model, and auth mode. For CI/scripted use:
-
-```bash
-aide init --no-interactive
-```
-
-### 2. Run a task
-
-```bash
 aide run "Add input validation to all API endpoints"
-```
-
-AIDE will:
-1. Call your configured LLM to decompose the task into a DAG of subtasks
-2. Spawn N agents in isolated git worktrees (auto-determined by complexity)
-3. Merge each passing branch back into your working tree
-
-### 3. Check progress
-
-```bash
 aide status
 ```
 
-### 4. Clean up
+### No git — content or research task
 
 ```bash
-aide clean
+mkdir brainstorm && cd brainstorm
+aide run "Generate 10 startup name ideas for an AI productivity tool"
+# outputs land in .aide/runs/<run-id>/agent-*/OUTPUT.md
+```
+
+### Using Claude from the CLI directly (single agent, no parallelism)
+
+AIDE fans out multiple agents by default. For a single-agent run, pass `--agents 1`:
+
+```bash
+aide run "Explain this codebase" --agents 1
+```
+
+Or use `worker_cmd` to pick which CLI runs:
+
+```bash
+# Force Claude Code as the worker
+echo '{"worker_cmd": "claude"}' > .aide/config.json
+aide run "Refactor this module"
+
+# Force Gemini
+echo '{"worker_cmd": "gemini"}' > .aide/config.json
+aide run "Write unit tests"
+
+# Force Codex (OpenAI)
+echo '{"worker_cmd": "codex"}' > .aide/config.json
+aide run "Fix the linting errors"
 ```
 
 ---
 
-## Usage
+## CLI Reference
 
-### `aide init [REPO_PATH] [OPTIONS]`
+### `aide init [REPO_PATH] [--no-interactive]`
 
-Initializes AIDE inside a git repository. Creates `.aide/` with a SQLite message bus, config, and directories for worktrees and run logs.
+Creates `.aide/` with config and SQLite database. Works inside or outside a git repo.
 
 ```bash
-aide init                     # interactive, current directory
-aide init /path/to/repo       # interactive, specific path
-aide init --no-interactive    # skip prompts, write defaults
+aide init                      # interactive, current directory
+aide init /path/to/project     # interactive, specific path
+aide init --no-interactive     # defaults only, no prompts
 ```
 
-**Interactive prompts:**
+Interactive prompts:
 
 ```
 Provider? [anthropic/openai/google/perplexity] (anthropic):
 Model? (claude-opus-4-7):
 Auth mode? [auto/api_key/subscription] (auto):
 API key env var? (ANTHROPIC_API_KEY):
+Workspace mode? [auto/git/bare] (auto):
 Detected worker CLI: claude ✓
 ```
 
@@ -185,36 +291,26 @@ Safe to re-run — exits early if already initialized.
 
 ### `aide run PROMPT [OPTIONS]`
 
-Decomposes the prompt into subtasks, fans out to agents, and integrates results.
+Decomposes the prompt and runs agents in parallel.
 
 ```bash
-# Simple prompt
-aide run "Refactor the auth module to use JWT"
-
-# Explicit agent count
-aide run "Add unit tests for all controllers" --agents 8
-
-# Read prompt from a markdown file
-aide run --file tasks.md
-
-# Run against a different repo
-aide run "Fix all linting errors" --repo /path/to/other-repo
-
-# Custom verify command before merging each branch
+aide run "Add rate limiting to the API"
+aide run "Generate names for a dog grooming startup" --agents 3
+aide run --file tasks.md --repo /path/to/project
 aide run "Migrate DB schema" --verify "pytest tests/db/"
+aide run "Analyze market trends" --output ./analysis
 ```
-
-**Options:**
 
 | Option | Description |
 |--------|-------------|
-| `PROMPT` | Task description (positional) |
+| `PROMPT` | Task description |
 | `--file FILE` | Read prompt from a `.md` file |
-| `--repo PATH` | Target repository (default: `.`) |
+| `--repo PATH` | Target directory (default: `.`) |
 | `--agents N` | Override auto-computed agent count |
-| `--verify CMD` | Run this command before merging each agent branch |
+| `--verify CMD` | Run before merging each branch (git mode) |
+| `--output DIR` | Output base directory (bare mode) |
 
-**Agent count auto-scaling** (based on complexity score 1–100):
+**Agent count auto-scaling** (by complexity score 1–100):
 
 | Score | Agents |
 |-------|--------|
@@ -228,40 +324,32 @@ aide run "Migrate DB schema" --verify "pytest tests/db/"
 
 ### `aide status [OPTIONS]`
 
-Shows run history and per-task outcomes.
-
 ```bash
-aide status                         # last 5 runs
-aide status --run-id abc123         # tasks for a specific run
-aide status --repo /path/to/repo    # different repo
+aide status                      # last 5 runs
+aide status --run-id abc123      # tasks for a specific run
+aide status --repo /path         # different directory
 ```
-
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `--repo PATH` | Target repository (default: `.`) |
-| `--run-id ID` | Show individual task statuses for a run |
 
 ---
 
-### `aide clean [OPTIONS]`
-
-Removes finished agent worktrees.
+### `aide clean`
 
 ```bash
-aide clean                  # remove all finished worktrees
-aide clean --repo /path     # different repo
+aide clean                       # remove all finished workspaces
+aide clean --repo /path          # different directory
 ```
+
+Git mode: removes worktrees. Bare mode: deletes run directories.
 
 ---
 
 ## Configuration
 
-`.aide/config.json` is written by `aide init` and can be edited at any time:
+`.aide/config.json` — written by `aide init`, editable at any time:
 
 ```json
 {
+  "mode": "auto",
   "provider": "anthropic",
   "model": "claude-opus-4-7",
   "auth_mode": "auto",
@@ -276,19 +364,18 @@ aide clean --repo /path     # different repo
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `provider` | `"anthropic"` | LLM for task planning: `anthropic`, `openai`, `google`, `perplexity` |
-| `model` | `"claude-opus-4-7"` | Model name passed to the provider |
+| `mode` | `"auto"` | `"auto"` \| `"git"` \| `"bare"` — workspace mode |
+| `provider` | `"anthropic"` | Planning LLM: `anthropic`, `openai`, `google`, `perplexity` |
+| `model` | `"claude-opus-4-7"` | Model name passed to the planning provider |
 | `auth_mode` | `"auto"` | `"auto"` \| `"api_key"` \| `"subscription"` |
-| `api_key_env` | `"ANTHROPIC_API_KEY"` | Env var name that holds the API key |
+| `api_key_env` | `"ANTHROPIC_API_KEY"` | Env var holding the API key |
 | `worker_cmd` | `"auto"` | Worker CLI: `"auto"` detects `claude`/`codex`/`gemini` on PATH |
-| `verify_command` | `null` | Shell command run before merging each branch. Merge skipped if it exits non-zero. |
-| `default_agent_count` | `null` | Fixed agent count for all runs (overrides auto-scaling). |
-| `worker_timeout_seconds` | `120` | Kill an agent after this many seconds of inactivity. |
-| `max_concurrent_workers` | `20` | Max agents running in parallel. |
+| `verify_command` | `null` | Shell command run before merging each branch (git mode) |
+| `default_agent_count` | `null` | Fixed agent count — overrides auto-scaling |
+| `worker_timeout_seconds` | `120` | Kill agent after this many seconds |
+| `max_concurrent_workers` | `20` | Max agents running in parallel |
 
-### Switching providers mid-project
-
-Edit `provider`, `model`, and `api_key_env` directly in `.aide/config.json` — no re-initialization needed.
+**Switch providers without re-initializing:**
 
 ```json
 {
@@ -301,10 +388,199 @@ Edit `provider`, `model`, and `api_key_env` directly in `.aide/config.json` — 
 
 ---
 
+## Using AIDE as a Library
+
+Embed AIDE in your own Python application to dispatch parallel agents programmatically.
+
+```python
+import asyncio
+from pathlib import Path
+from aide.planner import plan_task
+from aide.manager import run_manager
+from aide.taskbox import Taskbox
+from aide.workspace import init_aide
+
+async def run_parallel_agents(task: str, project_dir: Path) -> dict:
+    init_aide(project_dir)
+
+    plan = plan_task(
+        task,
+        provider="anthropic",
+        model="claude-opus-4-7",
+        auth_mode="auto",
+    )
+
+    taskbox = Taskbox(project_dir / ".aide" / "aide.db")
+
+    result = await run_manager(
+        plan,
+        project_dir,
+        taskbox,
+        mode="bare",           # no git required
+        max_concurrent=5,
+        worker_timeout=300,
+    )
+
+    return result
+
+# result = {
+#   "run_id": "abc123",
+#   "status": "complete",
+#   "completed": 3,
+#   "failed": 0,
+#   "total": 3,
+#   "output_paths": ["/path/.aide/runs/abc123/agent-xyz", ...]
+# }
+
+result = asyncio.run(run_parallel_agents(
+    "Analyze user reviews and extract the top 5 pain points",
+    Path("./workspace"),
+))
+
+for path in result["output_paths"]:
+    output = (Path(path) / "OUTPUT.md").read_text()
+    print(output)
+```
+
+### Programmatic git mode
+
+```python
+result = await run_manager(
+    plan,
+    repo_path=Path("/path/to/your/repo"),
+    taskbox=taskbox,
+    mode="git",
+    verify_cmd="pytest tests/",
+    max_concurrent=10,
+)
+```
+
+### Custom output directory
+
+```python
+result = await run_manager(
+    plan,
+    repo_path=project_dir,
+    taskbox=taskbox,
+    mode="bare",
+    output_dir=Path("/tmp/my-agent-outputs"),
+)
+```
+
+### Orchestrating agents from a web service
+
+```python
+from fastapi import FastAPI
+from aide.planner import plan_task
+from aide.manager import run_manager
+from aide.taskbox import Taskbox
+from aide.workspace import init_aide
+import asyncio
+from pathlib import Path
+
+app = FastAPI()
+
+@app.post("/run-agents")
+async def run_agents(task: str):
+    workspace = Path(f"/tmp/aide-runs/{task[:20]}")
+    workspace.mkdir(parents=True, exist_ok=True)
+    init_aide(workspace)
+
+    plan = plan_task(task, provider="anthropic", model="claude-opus-4-7")
+    taskbox = Taskbox(workspace / ".aide" / "aide.db")
+
+    result = await run_manager(plan, workspace, taskbox, mode="bare")
+    return result
+```
+
+---
+
+## Recipes
+
+### Run Claude on a task, collect output
+
+```bash
+aide run "Summarize the key decisions in DECISIONS.md" \
+  --agents 1 \
+  --output ./summaries
+cat summaries/.aide/runs/*/agent-*/OUTPUT.md
+```
+
+### Run GPT-4o as the worker
+
+```bash
+# .aide/config.json
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "auth_mode": "api_key",
+  "api_key_env": "OPENAI_API_KEY",
+  "worker_cmd": "codex"
+}
+```
+
+```bash
+aide run "Write a blog post about async Python"
+```
+
+### Run Gemini as the worker
+
+```bash
+gemini auth
+# .aide/config.json
+{
+  "provider": "google",
+  "model": "gemini-2.0-flash",
+  "auth_mode": "subscription",
+  "worker_cmd": "gemini"
+}
+```
+
+```bash
+aide run "Generate 20 product name ideas for a smart water bottle"
+```
+
+### Parallel code review across a large PR
+
+```bash
+cd your-repo
+aide run --file review-prompt.md --agents 8 --verify "pytest"
+```
+
+`review-prompt.md`:
+```markdown
+Review the changes in this PR for security vulnerabilities, performance issues, and test coverage gaps. Each agent should focus on a different module.
+```
+
+### Multi-agent content generation
+
+```bash
+# No git needed
+aide run "Write 5 distinct landing page headlines for a B2B SaaS product \
+  that helps engineering teams ship faster" --agents 5
+```
+
+Each agent produces its own `OUTPUT.md`. Browse results in `.aide/runs/<id>/`.
+
+### Setting up a git repo from scratch
+
+```bash
+git init my-project
+cd my-project
+aide init
+# answer prompts: provider, model, auth mode, workspace mode (auto or git)
+echo ".aide/" >> .gitignore
+git add .gitignore
+git commit -m "chore: add .gitignore for AIDE"
+aide run "Scaffold a FastAPI project with SQLAlchemy and alembic"
+```
+
+---
+
 ## How It Works
 
 ```
-You: aide run "Add rate limiting to all API endpoints"
+aide run "Add rate limiting to all API endpoints"
        │
        ▼
 1. Plan — LLM scores complexity (e.g. 45/100) and generates a DAG:
@@ -315,25 +591,30 @@ You: aide run "Add rate limiting to all API endpoints"
        │
        ▼
 2. Dispatch — Manager fans out dependency-free tasks to agents in parallel.
-              Each agent gets an isolated git worktree on branch aide/<run>/<agent>.
+              Git mode:  each agent gets an isolated worktree on branch aide/<run>/<agent>
+              Bare mode: each agent gets a temp dir under .aide/runs/<run>/<agent>
        │
        ▼
-3. Execute — Each worker writes TASK.md into its worktree and spawns
+3. Execute — Each worker writes TASK.md into its workspace and spawns
              the agentic CLI (claude/codex/gemini) to complete the work.
        │
        ▼
-4. Integrate — When an agent finishes, the verify command runs.
-               Passing branches are merged back. Dependent tasks unlock.
+4. Integrate — When an agent finishes:
+               Git mode:  verify command runs → passing branches merge → dependents unlock
+               Bare mode: output preserved at workspace path → dependents unlock
        │
        ▼
 5. Report — aide status shows per-run and per-task outcomes.
+            Bare mode also prints output_paths for each completed agent.
 ```
 
 Key properties:
-- **No shared state** — each agent has its own working tree; no file conflicts
-- **DAG ordering** — tasks only start when all their dependencies are merged
-- **Automatic integration** — branches are merged without manual intervention
-- **Provider-agnostic** — swap planning LLM without changing how workers run
+
+- **No shared state** — each agent has its own workspace; no file conflicts
+- **DAG ordering** — tasks only start when all their dependencies complete
+- **Automatic integration** — branches merged or outputs collected without manual work
+- **Provider-agnostic** — swap planning LLM and worker CLI independently
+- **Git-optional** — works for any agentic task, not just code
 
 ---
 
@@ -347,9 +628,11 @@ CLI (click)
  │
  └── Manager (asyncio)
       ├── Taskbox (SQLite) — message bus for task/agent/run state
-      ├── Workspace — git worktree lifecycle (create, symlink env files)
-      ├── Workers (N subprocesses) — each spawns agentic CLI in isolated worktree
-      └── Integration Engine — verify → merge → unlock dependents
+      ├── Workspace — slot lifecycle
+      │    ├── GitWorkspace  — worktrees, branch creation, git merge
+      │    └── BareWorkspace — temp dirs, no git
+      ├── Workers (N subprocesses) — each spawns agentic CLI in isolated workspace
+      └── Integration — verify → merge/collect → unlock dependents
 ```
 
 **Repo layout:**
@@ -366,7 +649,7 @@ aide/
   manager.py          # asyncio orchestrator — dispatch, monitor, integrate
   planner.py          # prompt → Plan (DAG of SubTasks + complexity score)
   worker.py           # async subprocess wrapper for agentic CLI
-  workspace.py        # git worktree creation, config I/O
+  workspace.py        # GitWorkspace, BareWorkspace, workspace_factory
   integration.py      # verify command + git merge
   taskbox.py          # SQLite message bus
   models.py           # Plan, SubTask, RunRecord, AgentRecord, Message
@@ -377,17 +660,11 @@ aide/
 ## Development
 
 ```bash
-# Install with dev dependencies
 pip install -e '.[dev]'
 
-# Run all tests
-pytest
-
-# Run tests excluding the slow timeout test (~100s)
-pytest --ignore=tests/test_worker.py
-
-# Run only the worker timeout test
-pytest tests/test_worker.py
+pytest                              # all tests
+pytest --ignore=tests/test_worker.py   # skip slow timeout test (~100s)
+pytest tests/test_worker.py            # only the timeout test
 ```
 
 ---
