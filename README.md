@@ -24,6 +24,7 @@ Give AIDE a task. It decomposes it into a dependency DAG, fans out to N AI agent
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
 - [Using AIDE as a Library](#using-aide-as-a-library)
+- [Variant Workers + LLM Judge](#variant-workers--llm-judge)
 - [Recipes](#recipes)
 - [How It Works](#how-it-works)
 - [Architecture](#architecture)
@@ -309,6 +310,7 @@ aide run "Analyze market trends" --output ./analysis
 | `--agents N` | Override auto-computed agent count |
 | `--verify CMD` | Run before merging each branch (git mode) |
 | `--output DIR` | Output base directory (bare mode) |
+| `--variants N` | Run N workers per task; LLM judge picks the best (default: 1) |
 
 **Agent count auto-scaling** (by complexity score 1–100):
 
@@ -357,6 +359,7 @@ Git mode: removes worktrees. Bare mode: deletes run directories.
   "worker_cmd": "auto",
   "verify_command": null,
   "default_agent_count": null,
+  "default_variants": 1,
   "worker_timeout_seconds": 120,
   "max_concurrent_workers": 20
 }
@@ -365,13 +368,14 @@ Git mode: removes worktrees. Bare mode: deletes run directories.
 | Key | Default | Description |
 |-----|---------|-------------|
 | `mode` | `"auto"` | `"auto"` \| `"git"` \| `"bare"` — workspace mode |
-| `provider` | `"anthropic"` | Planning LLM: `anthropic`, `openai`, `google`, `perplexity` |
-| `model` | `"claude-opus-4-7"` | Model name passed to the planning provider |
+| `provider` | `"anthropic"` | Planning LLM and judge LLM: `anthropic`, `openai`, `google`, `perplexity` |
+| `model` | `"claude-opus-4-7"` | Model name passed to the planning and judge provider |
 | `auth_mode` | `"auto"` | `"auto"` \| `"api_key"` \| `"subscription"` |
 | `api_key_env` | `"ANTHROPIC_API_KEY"` | Env var holding the API key |
 | `worker_cmd` | `"auto"` | Worker CLI: `"auto"` detects `claude`/`codex`/`gemini` on PATH |
 | `verify_command` | `null` | Shell command run before merging each branch (git mode) |
 | `default_agent_count` | `null` | Fixed agent count — overrides auto-scaling |
+| `default_variants` | `1` | Default workers per task for variant selection (overridden by `--variants`) |
 | `worker_timeout_seconds` | `120` | Kill agent after this many seconds |
 | `max_concurrent_workers` | `20` | Max agents running in parallel |
 
@@ -495,6 +499,121 @@ async def run_agents(task: str):
 
 ---
 
+## Variant Workers + LLM Judge
+
+Run N workers on the same task in parallel, then let an LLM judge select the best result. Useful when output quality matters and you want the strongest answer rather than the first one.
+
+```bash
+aide run "Implement the auth middleware" --variants 3
+```
+
+### How it works
+
+```
+task → spawn N workers in parallel (each in its own isolated workspace)
+            ↓
+       test gate: run verify command on each output
+            ↓
+       survivors → LLM judge reads each diff/output, picks the best
+            ↓
+       winner merges → task complete
+```
+
+**Stage 1 — Test gate:** AIDE runs your verify command on every worker's output. Workers that fail are excluded from judging. If none pass, all are sent to the judge anyway (no output is discarded silently).
+
+**Stage 2 — LLM judge:** The judge LLM receives each surviving output (git diff in git mode, `OUTPUT.md` in bare mode) and selects the best based on correctness, code clarity, and minimal diff size. It responds with `{"winner": "<agent_id>"}`.
+
+If only one worker succeeds, it is promoted directly — no judge call.
+
+### Using variants with Claude, ChatGPT, and Gemini
+
+The judge uses the same `provider` and `model` configured for planning. Set `default_variants` in config to apply variants to every run:
+
+**Claude (Anthropic) — default:**
+
+```json
+{
+  "provider": "anthropic",
+  "model": "claude-opus-4-7",
+  "default_variants": 3
+}
+```
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+aide run "Refactor the payment module" --variants 3
+```
+
+**ChatGPT (OpenAI):**
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "auth_mode": "api_key",
+  "api_key_env": "OPENAI_API_KEY",
+  "default_variants": 3
+}
+```
+
+```bash
+export OPENAI_API_KEY=sk-...
+pip install -e '.[openai]'
+aide run "Write unit tests for the billing service" --variants 3
+```
+
+**Gemini (Google):**
+
+```json
+{
+  "provider": "google",
+  "model": "gemini-2.0-flash",
+  "auth_mode": "subscription",
+  "default_variants": 3
+}
+```
+
+```bash
+gemini auth
+pip install -e '.[google]'
+aide run "Generate product descriptions" --variants 3
+```
+
+### Fallback behavior
+
+| Situation | Result |
+|-----------|--------|
+| All N workers fail | Task marked failed, no judge called |
+| Exactly 1 worker succeeds | Promoted directly, judge skipped |
+| 2+ succeed, all pass verify | Judge selects among all passing |
+| 2+ succeed, none pass verify | Judge selects among all that succeeded |
+| Judge returns invalid JSON | First worker selected (silent fallback) |
+| Judge names unknown agent | First worker selected (silent fallback) |
+| Judge call throws exception | First worker selected, warning logged |
+
+### Library usage
+
+```python
+from aide.models import Plan
+
+# Set variants on the plan before running
+plan = plan_task(task, provider="anthropic", model="claude-opus-4-7")
+plan.variants = 3
+
+result = await run_manager(
+    plan,
+    repo_path,
+    taskbox,
+    judge_provider="anthropic",   # LLM used to judge variants
+    judge_model="claude-opus-4-7",
+    verify_cmd="pytest tests/",
+)
+```
+
+`judge_provider` and `judge_model` default to `"anthropic"` and the provider's default model when not specified. They are independent of the worker CLI — you can run Gemini workers and judge with Claude, or vice versa.
+
+---
+
 ## Recipes
 
 ### Run Claude on a task, collect output
@@ -562,6 +681,32 @@ aide run "Write 5 distinct landing page headlines for a B2B SaaS product \
 
 Each agent produces its own `OUTPUT.md`. Browse results in `.aide/runs/<id>/`.
 
+### Best-of-3 with Claude judge
+
+```bash
+# Run 3 workers per task; Claude picks the best implementation
+aide run "Implement JWT refresh token rotation" \
+  --variants 3 \
+  --verify "pytest tests/auth/"
+```
+
+### Best-of-3 content generation with Gemini
+
+```bash
+# .aide/config.json
+{
+  "provider": "google",
+  "model": "gemini-2.0-flash",
+  "auth_mode": "subscription",
+  "default_variants": 3
+}
+```
+
+```bash
+aide run "Write three distinct value propositions for our B2B SaaS"
+# Gemini judges its own outputs; best one lands in OUTPUT.md
+```
+
 ### Setting up a git repo from scratch
 
 ```bash
@@ -593,13 +738,20 @@ aide run "Add rate limiting to all API endpoints"
 2. Dispatch — Manager fans out dependency-free tasks to agents in parallel.
               Git mode:  each agent gets an isolated worktree on branch aide/<run>/<agent>
               Bare mode: each agent gets a temp dir under .aide/runs/<run>/<agent>
+              --variants N: N agents race on the same task simultaneously
        │
        ▼
 3. Execute — Each worker writes TASK.md into its workspace and spawns
              the agentic CLI (claude/codex/gemini) to complete the work.
        │
        ▼
-4. Integrate — When an agent finishes:
+3b. Judge (--variants N only) — After all N workers finish:
+              Test gate: verify command filters failing outputs
+              LLM judge: scores survivors, selects winner
+              Winner proceeds to integration; others discarded
+       │
+       ▼
+4. Integrate — When an agent finishes (or variant winner is selected):
                Git mode:  verify command runs → passing branches merge → dependents unlock
                Bare mode: output preserved at workspace path → dependents unlock
        │
@@ -646,9 +798,10 @@ aide/
     google.py         # api_key: SDK  |  subscription: gemini --print
     perplexity.py     # api_key: httpx POST to api.perplexity.ai
   cli.py              # Click commands: init, run, status, clean
-  manager.py          # asyncio orchestrator — dispatch, monitor, integrate
+  manager.py          # asyncio orchestrator — dispatch N variants, judge, integrate
   planner.py          # prompt → Plan (DAG of SubTasks + complexity score)
-  worker.py           # async subprocess wrapper for agentic CLI
+  worker.py           # async subprocess wrapper for agentic CLI; returns bool
+  judge.py            # VariantCandidate, diff extraction, LLM judge selection
   workspace.py        # GitWorkspace, BareWorkspace, workspace_factory
   integration.py      # verify command + git merge
   taskbox.py          # SQLite message bus
