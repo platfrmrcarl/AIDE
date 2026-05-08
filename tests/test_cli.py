@@ -10,6 +10,16 @@ from aide.taskbox import Taskbox
 from aide.workspace import init_aide
 
 
+def _simple_plan():
+    return Plan(
+        run_id="abc123",
+        original_prompt="do stuff",
+        agent_count=1,
+        complexity_score=5,
+        tasks=[SubTask(id="t1", description="do stuff", depends_on=[])],
+    )
+
+
 def test_init_creates_aide_dir(runner, git_repo):
     """aide init creates .aide/ directory"""
     result = runner.invoke(main, ["init", str(git_repo), "--no-interactive"])
@@ -202,6 +212,30 @@ def test_init_no_interactive_writes_mode_auto(runner, git_repo):
     assert result.exit_code == 0
     config = json.loads((git_repo / ".aide" / "config.json").read_text())
     assert config["mode"] == "auto"
+
+
+def test_run_variants_flag_passed_to_manager(runner, git_repo):
+    with patch("aide.cli.plan_task", return_value=_simple_plan()) as mock_plan, \
+         patch("aide.cli.run_manager", new_callable=AsyncMock,
+               return_value={"run_id": "abc123", "status": "complete",
+                             "completed": 1, "failed": 0, "total": 1}) as mock_mgr:
+        runner.invoke(main, [
+            "run", "do stuff", "--repo", str(git_repo), "--variants", "3",
+        ])
+
+    plan_arg = mock_mgr.call_args[0][0]
+    assert plan_arg.variants == 3
+
+
+def test_run_variants_defaults_to_1(runner, git_repo):
+    with patch("aide.cli.plan_task", return_value=_simple_plan()), \
+         patch("aide.cli.run_manager", new_callable=AsyncMock,
+               return_value={"run_id": "abc123", "status": "complete",
+                             "completed": 1, "failed": 0, "total": 1}) as mock_mgr:
+        runner.invoke(main, ["run", "do stuff", "--repo", str(git_repo)])
+
+    plan_arg = mock_mgr.call_args[0][0]
+    assert plan_arg.variants == 1
 
 
 def test_clean_bare_mode_removes_slot_dirs(runner, tmp_path, mocker):

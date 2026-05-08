@@ -94,7 +94,9 @@ def init(repo_path, no_interactive):
 @click.option("--verify", "verify_cmd", default=None)
 @click.option("--output", "output_dir", default=None, type=click.Path(),
               help="Output directory for bare mode agent results.")
-def run(prompt, task_file, repo, agents, verify_cmd, output_dir):
+@click.option("--variants", type=int, default=None,
+              help="Workers per task for variant selection (default: 1)")
+def run(prompt, task_file, repo, agents, verify_cmd, output_dir, variants):
     """Run agents on a task prompt or .md file."""
     if prompt and task_file:
         click.echo("Error: provide either a prompt or --file, not both.")
@@ -122,6 +124,10 @@ def run(prompt, task_file, repo, agents, verify_cmd, output_dir):
         agent_count_override=agents,
     )
 
+    # Resolve variants: CLI flag → config → 1
+    resolved_variants = variants if variants is not None else config.get("default_variants", 1)
+    plan.variants = resolved_variants
+
     taskbox = Taskbox(repo_path / ".aide" / "aide.db")
 
     result = asyncio.run(
@@ -135,6 +141,8 @@ def run(prompt, task_file, repo, agents, verify_cmd, output_dir):
             worker_timeout=config.get("worker_timeout_seconds", 120),
             mode=config.get("mode", "auto"),
             output_dir=Path(output_dir) if output_dir else None,
+            judge_provider=config.get("provider", "anthropic"),
+            judge_model=config.get("model"),
         )
     )
 
