@@ -198,3 +198,10 @@ def test_init_aide_config_has_mode_field(tmp_path):
     init_aide(tmp_path)
     config = get_config(tmp_path)
     assert config["mode"] == "auto"
+
+
+def test_init_aide_config_includes_default_variants(tmp_path):
+    init_aide(tmp_path)
+    config = get_config(tmp_path)
+    assert "default_variants" in config
+    assert config["default_variants"] == 1

@@ -143,6 +143,7 @@ def init_aide(repo_path: Path) -> Path:
                     "worker_cmd": "auto",
                     "verify_command": None,
                     "default_agent_count": None,
+                    "default_variants": 1,
                     "worker_timeout_seconds": 120,
                     "max_concurrent_workers": 20,
                 },
