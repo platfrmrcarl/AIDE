@@ -184,7 +184,10 @@ async def run_manager(
         if event["type"] == "COMPLETE":
             winner_path = Path(event["winner_path"])
             winner_branch = event["winner_branch"]
-            ok, _out = workspace.integrate(winner_path, winner_branch, verify_cmd)
+            try:
+                ok, _out = workspace.integrate(winner_path, winner_branch, verify_cmd)
+            except Exception:
+                ok = False
             if ok:
                 completed.add(task_id)
                 taskbox.update_task_status(task_id, "complete")
