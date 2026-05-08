@@ -102,16 +102,19 @@ async def run_worker(
         async def _drain_stdout() -> None:
             assert proc.stdout
             async for line in proc.stdout:
+                decoded = line.decode().rstrip()
                 taskbox.send_message(
                     Message(
                         id=str(uuid.uuid4()),
                         type="PROGRESS",
                         from_agent=agent_id,
                         to_agent="manager",
-                        payload={"line": line.decode().rstrip()},
+                        payload={"line": decoded},
                         created_at=datetime.utcnow(),
                     )
                 )
+                if progress_callback is not None:
+                    progress_callback(agent_id, decoded)
 
         try:
             await asyncio.wait_for(

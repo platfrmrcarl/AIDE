@@ -199,3 +199,39 @@ async def test_worker_not_silent_sends_complete(db, tmp_path):
     )
     messages = db.get_unprocessed_messages("manager")
     assert any(m.type == "COMPLETE" for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_worker_progress_callback_called(db, tmp_path):
+    make_agent(db, tmp_path)
+    received: list[tuple[str, str]] = []
+
+    def _cb(agent_id: str, line: str) -> None:
+        received.append((agent_id, line))
+
+    script = tmp_path / "echo_worker.sh"
+    script.write_text("#!/bin/sh\necho 'hello from agent'\n")
+    script.chmod(script.stat().st_mode | 0o111)
+
+    await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd=str(script),
+        progress_callback=_cb,
+    )
+
+    assert any("hello from agent" in line for _, line in received)
+    assert all(agent_id == "a1" for agent_id, _ in received)
+
+
+@pytest.mark.asyncio
+async def test_worker_no_callback_still_works(db, tmp_path):
+    make_agent(db, tmp_path)
+    result = await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true",
+    )
+    assert result is True
