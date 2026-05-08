@@ -111,8 +111,9 @@ def test_reset_failed_tasks(db, tmp_path):
     db.save_task(task, run_id)
     db.update_task_status("t1", "failed")
 
-    db.reset_failed_tasks(run_id)
+    count = db.reset_failed_tasks(run_id)
 
+    assert count == 1
     tasks = db.get_tasks(run_id)
     assert tasks[0].status == "pending"
 
@@ -125,8 +126,9 @@ def test_reset_failed_tasks_leaves_complete_untouched(db, tmp_path):
         db.save_task(task, run_id)
         db.update_task_status(tid, status)
 
-    db.reset_failed_tasks(run_id)
+    count = db.reset_failed_tasks(run_id)
 
+    assert count == 1
     tasks = {t.id: t for t in db.get_tasks(run_id)}
     assert tasks["t1"].status == "complete"
     assert tasks["t2"].status == "pending"
