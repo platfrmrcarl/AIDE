@@ -334,6 +334,19 @@ aide status --repo /path         # different directory
 
 ---
 
+### `aide rerun --run-id ID [OPTIONS]`
+
+Retry all failed tasks from a previous run without re-planning. Completed tasks are skipped automatically; only failed tasks are re-dispatched.
+
+```bash
+aide rerun --run-id abc123
+aide rerun --run-id abc123 --repo /path/to/project
+```
+
+Useful when a run partially fails due to a flaky worker, network issue, or verify command failure. The run ID is shown by `aide status`.
+
+---
+
 ### `aide clean`
 
 ```bash
@@ -470,6 +483,48 @@ result = await run_manager(
     output_dir=Path("/tmp/my-agent-outputs"),
 )
 ```
+
+### Per-task completion callback
+
+Called after each task finishes (or fails), so you can update a UI, log progress, or trigger downstream work without waiting for the full run to complete.
+
+```python
+def on_task_done(task_id: str, status: str, description: str) -> None:
+    print(f"{'✓' if status == 'complete' else '✗'} {task_id}: {description}")
+
+result = await run_manager(
+    plan, repo_path, taskbox,
+    on_task_complete=on_task_done,
+)
+```
+
+`status` is `"complete"` or `"failed"`. Called for every task, including those that fail integration or verification.
+
+### Live stdout streaming from workers
+
+Stream each line of worker output as it arrives rather than waiting for the subprocess to exit:
+
+```python
+def on_line(agent_id: str, line: str) -> None:
+    print(f"[{agent_id}] {line}")
+
+result = await run_manager(
+    plan, repo_path, taskbox,
+    stream_output=True,       # prints to stderr automatically
+)
+
+# Or wire a custom callback directly to run_worker:
+from aide.worker import run_worker
+
+ok = await run_worker(
+    agent_id="a1", run_id="r1", task_id="t1",
+    task_description="Do the thing",
+    worktree_path=slot_path, taskbox=taskbox,
+    progress_callback=on_line,
+)
+```
+
+`stream_output=True` on `run_manager` streams all workers to stderr. For custom routing (e.g. per-agent log files), use `progress_callback` on `run_worker` directly.
 
 ### Orchestrating agents from a web service
 
@@ -707,6 +762,21 @@ aide run "Write three distinct value propositions for our B2B SaaS"
 # Gemini judges its own outputs; best one lands in OUTPUT.md
 ```
 
+### Retry failed tasks without re-planning
+
+```bash
+# First run — some agents fail
+aide run "Add rate limiting to all endpoints" --verify "pytest"
+# Run ID is shown in the output, or check: aide status
+
+# Retry just the failed tasks
+aide rerun --run-id abc123
+```
+
+Completed tasks are preserved. Only failed tasks are reset to pending and re-dispatched. Useful when a verify command was flaky or a worker timed out.
+
+---
+
 ### Setting up a git repo from scratch
 
 ```bash
@@ -739,6 +809,7 @@ aide run "Add rate limiting to all API endpoints"
               Git mode:  each agent gets an isolated worktree on branch aide/<run>/<agent>
               Bare mode: each agent gets a temp dir under .aide/runs/<run>/<agent>
               --variants N: N agents race on the same task simultaneously
+              Event-driven: asyncio.Queue — next wave starts the instant a task completes, no polling
        │
        ▼
 3. Execute — Each worker writes TASK.md into its workspace and spawns
@@ -797,10 +868,10 @@ aide/
     openai.py         # api_key: SDK only
     google.py         # api_key: SDK  |  subscription: gemini --print
     perplexity.py     # api_key: httpx POST to api.perplexity.ai
-  cli.py              # Click commands: init, run, status, clean
-  manager.py          # asyncio orchestrator — dispatch N variants, judge, integrate
+  cli.py              # Click commands: init, run, rerun, status, clean; async with rich spinner + table
+  manager.py          # asyncio event-loop — asyncio.Queue replaces poll; on_task_complete callback
   planner.py          # prompt → Plan (DAG of SubTasks + complexity score)
-  worker.py           # async subprocess wrapper for agentic CLI; returns bool
+  worker.py           # async subprocess wrapper; progress_callback for live stdout streaming
   judge.py            # VariantCandidate, diff extraction, LLM judge selection
   workspace.py        # GitWorkspace, BareWorkspace, workspace_factory
   integration.py      # verify command + git merge
