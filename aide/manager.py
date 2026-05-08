@@ -3,7 +3,9 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from .models import AgentRecord, Plan, RunRecord
+from . import judge
+from .integration import run_verify
+from .models import AgentRecord, Message, Plan, RunRecord
 from .taskbox import Taskbox
 from .worker import run_worker
 from .workspace import workspace_factory
@@ -19,6 +21,8 @@ async def run_manager(
     worker_timeout: int = 120,
     mode: str = "auto",
     output_dir: Path | None = None,
+    judge_provider: str = "anthropic",
+    judge_model: str | None = None,
 ) -> dict:
     workspace = workspace_factory({"mode": mode}, repo_path, output_dir)
     worker_mode = workspace.mode
@@ -43,32 +47,93 @@ async def run_manager(
     semaphore = asyncio.Semaphore(max_concurrent)
 
     async def _dispatch(subtask) -> None:
-        agent_id = f"agent-{str(uuid.uuid4())[:6]}"
-        slot_path, slot_id = workspace.create_slot(plan.run_id, agent_id)
+        slots: list[tuple[str, Path, str]] = []
+        worker_coros = []
 
-        taskbox.save_agent(
-            AgentRecord(
-                id=agent_id, run_id=plan.run_id,
-                worktree_path=str(slot_path), branch=slot_id,
-                task_id=subtask.id, last_heartbeat=datetime.utcnow(),
+        for _ in range(plan.variants):
+            agent_id = f"agent-{str(uuid.uuid4())[:6]}"
+            slot_path, slot_id = workspace.create_slot(plan.run_id, agent_id)
+            taskbox.save_agent(
+                AgentRecord(
+                    id=agent_id, run_id=plan.run_id,
+                    worktree_path=str(slot_path), branch=slot_id,
+                    task_id=subtask.id, last_heartbeat=datetime.utcnow(),
+                )
             )
-        )
+            slots.append((agent_id, slot_path, slot_id))
+            worker_coros.append(
+                run_worker(
+                    agent_id=agent_id, run_id=plan.run_id,
+                    task_id=subtask.id, task_description=subtask.description,
+                    worktree_path=slot_path, taskbox=taskbox,
+                    timeout=worker_timeout, worker_cmd=worker_cmd,
+                    mode=worker_mode, silent=True,
+                )
+            )
+
+        first_agent, first_path, first_branch = slots[0]
+        task_to_agent[subtask.id] = first_agent
         taskbox.update_task_status(
             subtask.id, "in_progress",
-            assigned_agent=agent_id,
-            worktree_path=str(slot_path),
-            branch=slot_id,
+            assigned_agent=first_agent,
+            worktree_path=str(first_path),
+            branch=first_branch,
         )
-        task_to_agent[subtask.id] = agent_id
 
         async with semaphore:
-            await run_worker(
-                agent_id=agent_id, run_id=plan.run_id,
-                task_id=subtask.id, task_description=subtask.description,
-                worktree_path=slot_path, taskbox=taskbox,
-                timeout=worker_timeout, worker_cmd=worker_cmd,
-                mode=worker_mode,
+            results: list[bool] = list(await asyncio.gather(*worker_coros))
+
+        successes = [slots[i] for i, ok in enumerate(results) if ok]
+
+        if not successes:
+            taskbox.send_message(
+                Message(
+                    id=str(uuid.uuid4()), type="ERROR",
+                    from_agent=first_agent, to_agent="manager",
+                    payload={"task_id": subtask.id, "error": "all variants failed"},
+                    created_at=datetime.utcnow(),
+                )
             )
+            return
+
+        if len(successes) == 1:
+            winner_agent, winner_path, winner_branch = successes[0]
+        else:
+            passing = [
+                (a, p, b) for a, p, b in successes
+                if run_verify(p, verify_cmd)[0]
+            ]
+            pool = passing if passing else successes
+            if len(pool) == 1:
+                winner_agent, winner_path, winner_branch = pool[0]
+            else:
+                candidates = [
+                    judge.VariantCandidate(agent_id=a, slot_path=p, branch=b)
+                    for a, p, b in pool
+                ]
+                w = judge.select_winner(
+                    subtask.description, candidates, workspace,
+                    provider=judge_provider, model=judge_model,
+                )
+                winner_agent = w.agent_id
+                winner_path = w.slot_path
+                winner_branch = w.branch
+
+        task_to_agent[subtask.id] = winner_agent
+        taskbox.update_task_status(
+            subtask.id, "in_progress",
+            assigned_agent=winner_agent,
+            worktree_path=str(winner_path),
+            branch=winner_branch,
+        )
+        taskbox.send_message(
+            Message(
+                id=str(uuid.uuid4()), type="COMPLETE",
+                from_agent=winner_agent, to_agent="manager",
+                payload={"task_id": subtask.id},
+                created_at=datetime.utcnow(),
+            )
+        )
 
     while len(completed) + len(failed) < len(all_ids):
         dispatchable = [
