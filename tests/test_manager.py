@@ -279,6 +279,7 @@ async def test_manager_on_task_complete_called_on_success(db, tmp_path):
     assert len(completed_calls) == 1
     assert completed_calls[0][0] == "t1"
     assert completed_calls[0][1] == "complete"
+    assert "Do thing A" in completed_calls[0][2]
 
 
 @pytest.mark.asyncio
@@ -295,7 +296,7 @@ async def test_manager_on_task_complete_called_on_failure(db, tmp_path):
         result = await run_manager(plan, tmp_path, db, on_task_complete=_cb)
 
     assert result["status"] == "failed"
-    assert any(status == "failed" for _, status, _ in failed_calls)
+    assert ("t1", "failed", "Do thing A") in failed_calls
 
 
 @pytest.mark.asyncio
