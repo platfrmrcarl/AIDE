@@ -238,6 +238,17 @@ def test_run_variants_defaults_to_1(runner, git_repo):
     assert plan_arg.variants == 1
 
 
+def test_run_planning_spinner_does_not_crash(runner, git_repo, mocker):
+    """Spinner is disabled in non-TTY (test) environments; run completes normally."""
+    init_aide(git_repo)
+    mocker.patch("aide.cli.plan_task", return_value=_simple_plan())
+    mocker.patch("aide.cli.run_manager", new=AsyncMock(return_value={
+        "run_id": "abc123", "status": "complete", "completed": 1, "failed": 0, "total": 1,
+    }))
+    result = runner.invoke(main, ["run", "do stuff", "--repo", str(git_repo)])
+    assert result.exit_code == 0, result.output
+
+
 def test_clean_bare_mode_removes_slot_dirs(runner, tmp_path, mocker):
     """aide clean in bare mode calls shutil.rmtree on slot dirs."""
     init_aide(tmp_path)

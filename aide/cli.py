@@ -104,6 +104,12 @@ def run(prompt, task_file, repo, agents, verify_cmd, output_dir, variants):
     if not prompt and not task_file:
         click.echo("Error: provide a prompt or --file.", err=True)
         raise SystemExit(1)
+    asyncio.run(_run_async(prompt, task_file, repo, agents, verify_cmd, output_dir, variants))
+
+
+async def _run_async(prompt, task_file, repo, agents, verify_cmd, output_dir, variants):
+    import sys
+    from rich.progress import Progress, SpinnerColumn, TextColumn
 
     repo_path = Path(repo).resolve()
 
@@ -115,43 +121,77 @@ def run(prompt, task_file, repo, agents, verify_cmd, output_dir, variants):
 
     config = get_config(repo_path)
 
-    plan = plan_task(
-        prompt,
-        provider=config.get("provider", "anthropic"),
-        model=config.get("model"),
-        auth_mode=config.get("auth_mode", "auto"),
-        api_key_env=config.get("api_key_env"),
-        agent_count_override=agents,
-    )
+    in_tty = sys.stderr.isatty()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]Planning..."),
+        disable=not in_tty,
+        transient=True,
+    ) as progress:
+        progress.add_task("")
+        plan = await asyncio.to_thread(
+            plan_task,
+            prompt,
+            provider=config.get("provider", "anthropic"),
+            model=config.get("model"),
+            auth_mode=config.get("auth_mode", "auto"),
+            api_key_env=config.get("api_key_env"),
+            agent_count_override=agents,
+        )
 
-    # Resolve variants: CLI flag → config → 1
     resolved_variants = variants if variants is not None else config.get("default_variants", 1)
     plan.variants = resolved_variants
 
     taskbox = Taskbox(repo_path / ".aide" / "aide.db")
 
-    result = asyncio.run(
-        run_manager(
-            plan,
-            repo_path,
-            taskbox,
-            max_concurrent=config.get("max_concurrent_workers", 20),
-            verify_cmd=verify_cmd or config.get("verify_command"),
-            worker_cmd=config.get("worker_cmd", "auto"),
-            worker_timeout=config.get("worker_timeout_seconds", 120),
-            mode=config.get("mode", "auto"),
-            output_dir=Path(output_dir) if output_dir else None,
-            judge_provider=config.get("provider", "anthropic"),
-            judge_model=config.get("model"),
-        )
+    result = await run_manager(
+        plan,
+        repo_path,
+        taskbox,
+        max_concurrent=config.get("max_concurrent_workers", 20),
+        verify_cmd=verify_cmd or config.get("verify_command"),
+        worker_cmd=config.get("worker_cmd", "auto"),
+        worker_timeout=config.get("worker_timeout_seconds", 120),
+        mode=config.get("mode", "auto"),
+        output_dir=Path(output_dir) if output_dir else None,
+        judge_provider=config.get("provider", "anthropic"),
+        judge_model=config.get("model"),
+        on_task_complete=_make_completion_cb(in_tty),
+        stream_output=False,
     )
 
-    click.echo(
-        f"Run {result['run_id']}: {result['status']} "
-        f"({result['completed']}/{result['total']} tasks)"
-    )
+    _print_run_table(result, taskbox, plan.run_id)
+
+
+def _make_completion_cb(verbose: bool):
+    if not verbose:
+        return None
+    def _cb(task_id: str, status: str, desc: str) -> None:
+        icon = "✓" if status == "complete" else "✗"
+        click.echo(f"  {icon} {task_id}: {desc[:70]}", err=False)
+    return _cb
+
+
+def _print_run_table(result: dict, taskbox, run_id: str) -> None:
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    tasks = taskbox.get_tasks(run_id)
+
+    table = Table(title=f"Run {result['run_id']}  •  {result['status']}", show_lines=False)
+    table.add_column("Task", style="dim", width=6)
+    table.add_column("Status", width=10)
+    table.add_column("Description")
+
+    for t in tasks:
+        icon = "✓" if t.status == "complete" else ("✗" if t.status == "failed" else "·")
+        color = "green" if t.status == "complete" else ("red" if t.status == "failed" else "yellow")
+        table.add_row(t.id, f"[{color}]{icon} {t.status}[/{color}]", t.description[:80])
+
+    console.print(table)
     for path in result.get("output_paths", []):
-        click.echo(f"  → {path}")
+        console.print(f"  [dim]→[/dim] {path}")
 
 
 @main.command()
