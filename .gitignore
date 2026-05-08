@@ -10,4 +10,3 @@ build/
 .venv/
 venv/
 .env
-CLAUDE.md
