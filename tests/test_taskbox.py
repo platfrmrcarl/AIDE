@@ -94,3 +94,11 @@ def test_update_agent_status(db):
     agents = db.get_agents("r1")
     assert agents[0].status == "working"
     assert agents[0].pid == 12345
+
+
+def test_taskbox_uses_wal_mode(tmp_path):
+    from aide.taskbox import Taskbox
+    db = Taskbox(tmp_path / "aide.db")
+    with db._conn() as conn:
+        mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+    assert mode == "wal"

@@ -52,6 +52,7 @@ async def run_worker(
     worker_cmd: str = "auto",
     mode: Literal["git", "bare"] = "git",
     silent: bool = False,
+    progress_callback=None,
 ) -> bool:
     if mode not in ("git", "bare"):
         raise ValueError(f"Unknown mode {mode!r}. Expected 'git' or 'bare'.")

@@ -14,6 +14,8 @@ class Taskbox:
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
         return conn
 
     def _init_db(self) -> None:
@@ -88,7 +90,7 @@ class Taskbox:
         now = datetime.utcnow().isoformat()
         with self._conn() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT OR IGNORE INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     task.id, run_id, task.description, json.dumps(task.depends_on),
                     task.assigned_agent, task.status, task.worktree_path, task.branch,
