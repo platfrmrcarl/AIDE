@@ -258,6 +258,56 @@ async def test_manager_variants_3_all_fail(db, tmp_path):
     ws.integrate.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# on_task_complete callback tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_manager_on_task_complete_called_on_success(db, tmp_path):
+    plan = _make_plan()
+    ws = _make_mock_workspace(tmp_path)
+    completed_calls: list[tuple[str, str, str]] = []
+
+    def _cb(task_id, status, desc):
+        completed_calls.append((task_id, status, desc))
+
+    with patch("aide.manager.workspace_factory", return_value=ws), \
+         patch("aide.manager.run_worker", new_callable=AsyncMock, return_value=True):
+        result = await run_manager(plan, tmp_path, db, on_task_complete=_cb)
+
+    assert result["status"] == "complete"
+    assert len(completed_calls) == 1
+    assert completed_calls[0][0] == "t1"
+    assert completed_calls[0][1] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_manager_on_task_complete_called_on_failure(db, tmp_path):
+    plan = _make_plan()
+    ws = _make_mock_workspace(tmp_path, integrate_result=(False, "tests failed"))
+    failed_calls: list[tuple[str, str, str]] = []
+
+    def _cb(task_id, status, desc):
+        failed_calls.append((task_id, status, desc))
+
+    with patch("aide.manager.workspace_factory", return_value=ws), \
+         patch("aide.manager.run_worker", new_callable=AsyncMock, return_value=True):
+        result = await run_manager(plan, tmp_path, db, on_task_complete=_cb)
+
+    assert result["status"] == "failed"
+    assert any(status == "failed" for _, status, _ in failed_calls)
+
+
+@pytest.mark.asyncio
+async def test_manager_no_callback_still_works(db, tmp_path):
+    plan = _make_plan()
+    ws = _make_mock_workspace(tmp_path)
+    with patch("aide.manager.workspace_factory", return_value=ws), \
+         patch("aide.manager.run_worker", new_callable=AsyncMock, return_value=True):
+        result = await run_manager(plan, tmp_path, db)
+    assert result["status"] == "complete"
+
+
 @pytest.mark.asyncio
 async def test_manager_variants_3_none_pass_verify_judge_gets_all(db, tmp_path):
     plan = _make_plan_v(variants=3)
