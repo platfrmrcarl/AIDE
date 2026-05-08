@@ -186,7 +186,8 @@ async def run_manager(
             winner_branch = event["winner_branch"]
             try:
                 ok, _out = workspace.integrate(winner_path, winner_branch, verify_cmd)
-            except Exception:
+            except Exception as exc:
+                print(f"integrate error ({task_id}): {exc}", file=sys.stderr)
                 ok = False
             if ok:
                 completed.add(task_id)
@@ -194,18 +195,27 @@ async def run_manager(
                 if worker_mode == "bare":
                     output_paths.append(event["winner_path"])
                 if on_task_complete:
-                    on_task_complete(task_id, "complete", desc)
+                    try:
+                        on_task_complete(task_id, "complete", desc)
+                    except Exception as exc:
+                        print(f"on_task_complete error: {exc}", file=sys.stderr)
             else:
                 failed.add(task_id)
                 taskbox.update_task_status(task_id, "failed")
                 if on_task_complete:
-                    on_task_complete(task_id, "failed", desc)
+                    try:
+                        on_task_complete(task_id, "failed", desc)
+                    except Exception as exc:
+                        print(f"on_task_complete error: {exc}", file=sys.stderr)
 
         elif event["type"] == "ERROR":
             failed.add(task_id)
             taskbox.update_task_status(task_id, "failed")
             if on_task_complete:
-                on_task_complete(task_id, "failed", desc)
+                try:
+                    on_task_complete(task_id, "failed", desc)
+                except Exception as exc:
+                    print(f"on_task_complete error: {exc}", file=sys.stderr)
 
         in_flight.pop(task_id, None)
 

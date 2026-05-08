@@ -218,6 +218,7 @@ def rerun(run_id, repo):
 
     from .models import Plan
     config = get_config(repo_path) if is_initialized(repo_path) else {}
+    tasks = taskbox.get_tasks(run_id)  # re-fetch with updated statuses
     plan = Plan(
         run_id=run_id,
         original_prompt=run_rec.prompt,
