@@ -21,6 +21,7 @@ class Plan:
     agent_count: int
     complexity_score: int
     tasks: list[SubTask]
+    variants: int = 1
 
 
 @dataclass

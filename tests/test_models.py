@@ -44,3 +44,17 @@ def test_run_record_defaults():
     assert run.status == "running"
     assert run.completed_at is None
     assert isinstance(run.started_at, datetime)
+
+
+def test_plan_variants_default():
+    tasks = [SubTask(id="t1", description="task", depends_on=[])]
+    plan = Plan(run_id="abc", original_prompt="do stuff", agent_count=3,
+                complexity_score=15, tasks=tasks)
+    assert plan.variants == 1
+
+
+def test_plan_variants_custom():
+    tasks = [SubTask(id="t1", description="task", depends_on=[])]
+    plan = Plan(run_id="abc", original_prompt="do stuff", agent_count=3,
+                complexity_score=15, tasks=tasks, variants=3)
+    assert plan.variants == 3
