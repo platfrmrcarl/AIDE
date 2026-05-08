@@ -132,3 +132,70 @@ async def test_worker_git_mode_writes_git_template(db, tmp_path):
     content = (tmp_path / "TASK.md").read_text()
     assert "git commit" in content
     assert "OUTPUT.md" not in content
+
+
+@pytest.mark.asyncio
+async def test_worker_returns_true_on_success(db, tmp_path):
+    make_agent(db, tmp_path)
+    result = await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true",
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_worker_returns_false_on_failure(db, tmp_path):
+    make_agent(db, tmp_path)
+    result = await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="false",
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_worker_returns_false_on_timeout(db, tmp_path):
+    import stat
+    make_agent(db, tmp_path)
+    script = tmp_path / "slow.sh"
+    script.write_text("#!/bin/sh\nsleep 100\n")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    result = await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=1, worker_cmd=str(script),
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_worker_silent_suppresses_routing_messages(db, tmp_path):
+    make_agent(db, tmp_path)
+    result = await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true", silent=True,
+    )
+    assert result is True
+    messages = db.get_unprocessed_messages("manager")
+    assert not any(m.type in ("COMPLETE", "ERROR") for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_worker_not_silent_sends_complete(db, tmp_path):
+    make_agent(db, tmp_path)
+    await run_worker(
+        agent_id="a1", run_id="r1", task_id="t1",
+        task_description="Do the thing",
+        worktree_path=tmp_path, taskbox=db,
+        timeout=10, worker_cmd="true", silent=False,
+    )
+    messages = db.get_unprocessed_messages("manager")
+    assert any(m.type == "COMPLETE" for m in messages)

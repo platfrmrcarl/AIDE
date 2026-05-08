@@ -51,26 +51,28 @@ async def run_worker(
     timeout: int = 120,
     worker_cmd: str = "auto",
     mode: Literal["git", "bare"] = "git",
-) -> None:
+    silent: bool = False,
+) -> bool:
     if mode not in ("git", "bare"):
         raise ValueError(f"Unknown mode {mode!r}. Expected 'git' or 'bare'.")
     cmd = worker_cmd if worker_cmd != "auto" else detect_worker_cmd()
     if cmd is None:
-        taskbox.send_message(
-            Message(
-                id=str(uuid.uuid4()),
-                type="ERROR",
-                from_agent=agent_id,
-                to_agent="manager",
-                payload={
-                    "task_id": task_id,
-                    "error": "No worker CLI found. Install claude, codex, or gemini.",
-                },
-                created_at=datetime.utcnow(),
+        if not silent:
+            taskbox.send_message(
+                Message(
+                    id=str(uuid.uuid4()),
+                    type="ERROR",
+                    from_agent=agent_id,
+                    to_agent="manager",
+                    payload={
+                        "task_id": task_id,
+                        "error": "No worker CLI found. Install claude, codex, or gemini.",
+                    },
+                    created_at=datetime.utcnow(),
+                )
             )
-        )
         taskbox.update_agent_status(agent_id, "failed")
-        return
+        return False
 
     short_desc = task_description[:50].replace("\n", " ")
     template = _BARE_TASK_TEMPLATE if mode == "bare" else _GIT_TASK_TEMPLATE
@@ -118,60 +120,67 @@ async def run_worker(
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            taskbox.send_message(
-                Message(
-                    id=str(uuid.uuid4()),
-                    type="ERROR",
-                    from_agent=agent_id,
-                    to_agent="manager",
-                    payload={"task_id": task_id, "error": "timeout"},
-                    created_at=datetime.utcnow(),
+            if not silent:
+                taskbox.send_message(
+                    Message(
+                        id=str(uuid.uuid4()),
+                        type="ERROR",
+                        from_agent=agent_id,
+                        to_agent="manager",
+                        payload={"task_id": task_id, "error": "timeout"},
+                        created_at=datetime.utcnow(),
+                    )
                 )
-            )
             taskbox.update_agent_status(agent_id, "failed")
-            return
+            return False
 
         if proc.returncode == 0:
-            taskbox.send_message(
-                Message(
-                    id=str(uuid.uuid4()),
-                    type="COMPLETE",
-                    from_agent=agent_id,
-                    to_agent="manager",
-                    payload={"task_id": task_id},
-                    created_at=datetime.utcnow(),
+            if not silent:
+                taskbox.send_message(
+                    Message(
+                        id=str(uuid.uuid4()),
+                        type="COMPLETE",
+                        from_agent=agent_id,
+                        to_agent="manager",
+                        payload={"task_id": task_id},
+                        created_at=datetime.utcnow(),
+                    )
                 )
-            )
             taskbox.update_agent_status(agent_id, "done")
+            return True
         else:
             stderr = b""
             if proc.stderr:
                 stderr = await proc.stderr.read()
+            if not silent:
+                taskbox.send_message(
+                    Message(
+                        id=str(uuid.uuid4()),
+                        type="ERROR",
+                        from_agent=agent_id,
+                        to_agent="manager",
+                        payload={
+                            "task_id": task_id,
+                            "returncode": proc.returncode,
+                            "stderr": stderr.decode(),
+                        },
+                        created_at=datetime.utcnow(),
+                    )
+                )
+            taskbox.update_agent_status(agent_id, "failed")
+            return False
+
+    except Exception as exc:
+        if not silent:
             taskbox.send_message(
                 Message(
                     id=str(uuid.uuid4()),
                     type="ERROR",
                     from_agent=agent_id,
                     to_agent="manager",
-                    payload={
-                        "task_id": task_id,
-                        "returncode": proc.returncode,
-                        "stderr": stderr.decode(),
-                    },
+                    payload={"task_id": task_id, "error": str(exc)},
                     created_at=datetime.utcnow(),
                 )
             )
-            taskbox.update_agent_status(agent_id, "failed")
-
-    except Exception as exc:
-        taskbox.send_message(
-            Message(
-                id=str(uuid.uuid4()),
-                type="ERROR",
-                from_agent=agent_id,
-                to_agent="manager",
-                payload={"task_id": task_id, "error": str(exc)},
-                created_at=datetime.utcnow(),
-            )
-        )
         taskbox.update_agent_status(agent_id, "failed")
+        return False
