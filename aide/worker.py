@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from .models import Message
 from .taskbox import Taskbox
@@ -52,7 +52,7 @@ async def run_worker(
     worker_cmd: str = "auto",
     mode: Literal["git", "bare"] = "git",
     silent: bool = False,
-    progress_callback=None,
+    progress_callback: Callable[[str, str], None] | None = None,
 ) -> bool:
     if mode not in ("git", "bare"):
         raise ValueError(f"Unknown mode {mode!r}. Expected 'git' or 'bare'.")
