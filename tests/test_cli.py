@@ -249,6 +249,59 @@ def test_run_planning_spinner_does_not_crash(runner, git_repo, mocker):
     assert result.exit_code == 0, result.output
 
 
+def test_rerun_runs_failed_tasks(runner, git_repo, mocker):
+    init_aide(git_repo)
+    from aide.taskbox import Taskbox
+    from aide.models import RunRecord, SubTask
+    from datetime import datetime
+
+    taskbox = Taskbox(git_repo / ".aide" / "aide.db")
+    run_id = "abc123"
+    taskbox.save_run(RunRecord(
+        id=run_id, prompt="do stuff", agent_count=1, complexity_score=5,
+        started_at=datetime(2026, 1, 1),
+    ))
+    task = SubTask(id="t1", description="Do a thing", depends_on=[])
+    taskbox.save_task(task, run_id)
+    taskbox.update_task_status("t1", "failed")
+
+    mock_mgr = mocker.patch("aide.cli.run_manager", new=AsyncMock(return_value={
+        "run_id": run_id, "status": "complete", "completed": 1, "failed": 0, "total": 1,
+    }))
+
+    result = runner.invoke(main, ["rerun", "--run-id", run_id, "--repo", str(git_repo)])
+    assert result.exit_code == 0, result.output
+    mock_mgr.assert_called_once()
+
+
+def test_rerun_exits_when_run_not_found(runner, git_repo):
+    init_aide(git_repo)
+    result = runner.invoke(main, ["rerun", "--run-id", "notexist", "--repo", str(git_repo)])
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+def test_rerun_exits_when_no_failed_tasks(runner, git_repo, mocker):
+    init_aide(git_repo)
+    from aide.taskbox import Taskbox
+    from aide.models import RunRecord, SubTask
+    from datetime import datetime
+
+    taskbox = Taskbox(git_repo / ".aide" / "aide.db")
+    run_id = "abc123"
+    taskbox.save_run(RunRecord(
+        id=run_id, prompt="do stuff", agent_count=1, complexity_score=5,
+        started_at=datetime(2026, 1, 1),
+    ))
+    task = SubTask(id="t1", description="Do a thing", depends_on=[])
+    taskbox.save_task(task, run_id)
+    taskbox.update_task_status("t1", "complete")
+
+    result = runner.invoke(main, ["rerun", "--run-id", run_id, "--repo", str(git_repo)])
+    assert result.exit_code == 0
+    assert "no failed" in result.output.lower()
+
+
 def test_clean_bare_mode_removes_slot_dirs(runner, tmp_path, mocker):
     """aide clean in bare mode calls shutil.rmtree on slot dirs."""
     init_aide(tmp_path)

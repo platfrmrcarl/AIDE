@@ -195,6 +195,57 @@ def _print_run_table(result: dict, taskbox, run_id: str) -> None:
 
 
 @main.command()
+@click.option("--run-id", required=True, help="ID of the run to retry.")
+@click.option("--repo", default=".", type=click.Path())
+def rerun(run_id, repo):
+    """Retry failed tasks from a previous run."""
+    repo_path = Path(repo).resolve()
+    taskbox = Taskbox(repo_path / ".aide" / "aide.db")
+
+    run_rec = taskbox.get_run(run_id)
+    if not run_rec:
+        click.echo(f"Run {run_id} not found.")
+        raise SystemExit(1)
+
+    tasks = taskbox.get_tasks(run_id)
+    failed = [t for t in tasks if t.status == "failed"]
+    if not failed:
+        click.echo(f"No failed tasks in run {run_id}.")
+        return
+
+    taskbox.reset_failed_tasks(run_id)
+    click.echo(f"Retrying {len(failed)} failed task(s) from run {run_id}.")
+
+    from .models import Plan
+    config = get_config(repo_path) if is_initialized(repo_path) else {}
+    plan = Plan(
+        run_id=run_id,
+        original_prompt=run_rec.prompt,
+        agent_count=run_rec.agent_count,
+        complexity_score=run_rec.complexity_score,
+        tasks=tasks,
+    )
+
+    asyncio.run(_rerun_async(plan, repo_path, taskbox, config))
+
+
+async def _rerun_async(plan, repo_path: Path, taskbox, config: dict) -> None:
+    result = await run_manager(
+        plan,
+        repo_path,
+        taskbox,
+        max_concurrent=config.get("max_concurrent_workers", 20),
+        verify_cmd=config.get("verify_command"),
+        worker_cmd=config.get("worker_cmd", "auto"),
+        worker_timeout=config.get("worker_timeout_seconds", 120),
+        mode=config.get("mode", "auto"),
+        judge_provider=config.get("provider", "anthropic"),
+        judge_model=config.get("model"),
+    )
+    _print_run_table(result, taskbox, plan.run_id)
+
+
+@main.command()
 @click.option("--repo", default=".", type=click.Path())
 @click.option("--run-id", default=None)
 def status(repo, run_id):

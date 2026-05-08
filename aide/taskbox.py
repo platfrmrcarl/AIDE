@@ -127,6 +127,15 @@ class Taskbox:
     def get_completed_task_ids(self, run_id: str) -> set[str]:
         return {t.id for t in self.get_tasks(run_id) if t.status == "complete"}
 
+    def reset_failed_tasks(self, run_id: str) -> int:
+        """Reset failed tasks for a run back to pending. Returns count reset."""
+        with self._conn() as conn:
+            cursor = conn.execute(
+                "UPDATE tasks SET status='pending', updated_at=? WHERE run_id=? AND status='failed'",
+                (datetime.utcnow().isoformat(), run_id),
+            )
+            return cursor.rowcount
+
     def send_message(self, msg: Message) -> None:
         with self._conn() as conn:
             conn.execute(

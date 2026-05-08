@@ -102,3 +102,31 @@ def test_taskbox_uses_wal_mode(tmp_path):
     with db._conn() as conn:
         mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
     assert mode == "wal"
+
+
+def test_reset_failed_tasks(db, tmp_path):
+    from aide.models import SubTask
+    run_id = "r1"
+    task = SubTask(id="t1", description="thing", depends_on=[])
+    db.save_task(task, run_id)
+    db.update_task_status("t1", "failed")
+
+    db.reset_failed_tasks(run_id)
+
+    tasks = db.get_tasks(run_id)
+    assert tasks[0].status == "pending"
+
+
+def test_reset_failed_tasks_leaves_complete_untouched(db, tmp_path):
+    from aide.models import SubTask
+    run_id = "r1"
+    for tid, status in [("t1", "complete"), ("t2", "failed")]:
+        task = SubTask(id=tid, description="thing", depends_on=[])
+        db.save_task(task, run_id)
+        db.update_task_status(tid, status)
+
+    db.reset_failed_tasks(run_id)
+
+    tasks = {t.id: t for t in db.get_tasks(run_id)}
+    assert tasks["t1"].status == "complete"
+    assert tasks["t2"].status == "pending"
