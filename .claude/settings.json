@@ -38,7 +38,15 @@
       "Bash(ruff:*)",
       "Bash(mypy:*)",
       "Bash(black:*)",
-      "Bash(isort:*)"
+      "Bash(isort:*)",
+      "Bash(npm run *)",
+      "Bash(git *)",
+      "Bash(docker *)",
+      "Bash(gcloud *)",
+      "Bash(stripe *)",
+      "Edit(*)",
+      "Read(*)",
+      "Write(*)"
     ],
     "ask": [
       "Bash(git push:*)",
@@ -60,7 +68,13 @@
       "Read(./**/.env.*)",
       "Read(./**/serviceAccountKey.json)",
       "Read(./**/*.pem)",
-      "Read(./**/*.key)"
+      "Read(./**/*.key)",
+      "Bash(rm -rf *)",
+      "Bash(gcloud * delete *)"
     ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "stripe@claude-plugins-official": true
   }
 }
